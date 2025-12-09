@@ -17,6 +17,8 @@ interface CanvasStoreState extends CanvasState {
     setZoom: (zoom: number) => void;
     setPan: (x: number, y: number) => void;
     setCursor: (x: number, y: number) => void;
+    setCursorPosition: (x: number, y: number) => void;
+    loadImage: (path: string) => Promise<void>;
     setLoading: (loading: boolean) => void;
     setError: (error: string | null) => void;
 
@@ -27,9 +29,9 @@ interface CanvasStoreState extends CanvasState {
     fitToScreen: (canvasWidth: number, canvasHeight: number) => void;
 }
 
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 10;
-const ZOOM_STEP = 0.25;
+const MIN_ZOOM = 10;      // 10%
+const MAX_ZOOM = 1000;    // 1000%
+const ZOOM_STEP = 25;     // 25%
 
 export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     // Initial state
@@ -37,7 +39,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     imagePath: null,
     isLoading: false,
     error: null,
-    zoom: 1,
+    zoom: 100,
     panX: 0,
     panY: 0,
     cursorX: 0,
@@ -49,7 +51,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
             baseImage: image,
             imagePath: path,
             error: null,
-            zoom: 1,
+            zoom: 100,
             panX: 0,
             panY: 0,
         }),
@@ -58,7 +60,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
         set({
             baseImage: null,
             imagePath: null,
-            zoom: 1,
+            zoom: 100,
             panX: 0,
             panY: 0,
         }),
@@ -69,6 +71,31 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     setPan: (panX, panY) => set({ panX, panY }),
 
     setCursor: (cursorX, cursorY) => set({ cursorX, cursorY }),
+
+    setCursorPosition: (cursorX, cursorY) => set({ cursorX, cursorY }),
+
+    loadImage: async (path) => {
+        set({ isLoading: true, error: null });
+        try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const imageData = await invoke<ImageData>('open_image', { path });
+            set({
+                baseImage: imageData,
+                imagePath: path,
+                isLoading: false,
+                error: null,
+                zoom: 100,
+                panX: 0,
+                panY: 0,
+            });
+        } catch (error) {
+            set({
+                isLoading: false,
+                error: error instanceof Error ? error.message : 'Failed to load image',
+            });
+            throw error;
+        }
+    },
 
     setLoading: (isLoading) => set({ isLoading }),
 
@@ -85,7 +112,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
         set({ zoom: Math.max(MIN_ZOOM, zoom - ZOOM_STEP) });
     },
 
-    resetZoom: () => set({ zoom: 1, panX: 0, panY: 0 }),
+    resetZoom: () => set({ zoom: 100, panX: 0, panY: 0 }),
 
     fitToScreen: (canvasWidth, canvasHeight) => {
         const { baseImage } = get();
@@ -93,7 +120,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
 
         const scaleX = canvasWidth / baseImage.width;
         const scaleY = canvasHeight / baseImage.height;
-        const zoom = Math.min(scaleX, scaleY) * 0.9; // 90% of available space
+        const zoom = Math.min(scaleX, scaleY) * 90; // 90% of available space
 
         set({ zoom, panX: 0, panY: 0 });
     },

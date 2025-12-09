@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
+import { Canvas } from './components/Canvas';
+import { useCanvasStore } from './store/canvasStore';
 import './styles/index.css';
 
 interface AppInfo {
@@ -8,12 +11,38 @@ interface AppInfo {
 }
 
 function App() {
-    const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+    const {
+        baseImage,
+        isLoading,
+        loadImage,
+        zoom,
+        zoomIn,
+        zoomOut,
+        cursorX,
+        cursorY
+    } = useCanvasStore();
 
     useEffect(() => {
-        // Get app info from backend
-        invoke<AppInfo>('get_app_info').then(setAppInfo).catch(console.error);
+        invoke<AppInfo>('get_app_info').catch(console.error);
     }, []);
+
+    const handleOpenImage = async () => {
+        try {
+            const selected = await open({
+                multiple: false,
+                filters: [{
+                    name: 'Image',
+                    extensions: ['png', 'jpg', 'jpeg', 'webp']
+                }]
+            });
+
+            if (selected && typeof selected === 'string') {
+                await loadImage(selected);
+            }
+        } catch (error) {
+            console.error('Failed to open image:', error);
+        }
+    };
 
     return (
         <div className="app">
@@ -21,13 +50,11 @@ function App() {
             <header className="top-bar">
                 <div className="top-bar-left">
                     <span className="app-logo">🍌</span>
-                    <span className="app-title">
-                        {appInfo?.name || 'BananaSlice'}
-                    </span>
-                    <span className="app-version">v{appInfo?.version || '0.1.0'}</span>
+                    <span className="app-title">BananaSlice</span>
+                    <span className="app-version">v0.1.0</span>
                 </div>
                 <div className="top-bar-center">
-                    <button className="top-bar-btn">File</button>
+                    <button className="top-bar-btn" onClick={handleOpenImage}>File</button>
                     <button className="top-bar-btn">Edit</button>
                     <button className="top-bar-btn">View</button>
                     <button className="top-bar-btn">Help</button>
@@ -58,25 +85,31 @@ function App() {
                     </div>
                     <div className="tool-divider"></div>
                     <div className="tool-group">
-                        <button className="tool-btn" title="Zoom In (+)">
+                        <button className="tool-btn" title="Zoom In (+)" onClick={zoomIn}>
                             <span className="tool-icon">🔍+</span>
                         </button>
-                        <button className="tool-btn" title="Zoom Out (-)">
+                        <button className="tool-btn" title="Zoom Out (-)" onClick={zoomOut}>
                             <span className="tool-icon">🔍-</span>
                         </button>
                     </div>
                 </aside>
 
                 {/* Canvas Area */}
-                <div className="canvas-container">
-                    <div className="canvas-wrapper">
-                        <div className="empty-state">
-                            <div className="empty-icon">🖼️</div>
-                            <h2>Welcome to BananaSlice</h2>
-                            <p>Open an image to get started with AI-powered generative fill</p>
-                            <button className="primary-btn">Open Image</button>
+                <div className={`canvas-container ${baseImage ? 'has-image' : ''}`}>
+                    {!baseImage ? (
+                        <div className="canvas-wrapper">
+                            <div className="empty-state">
+                                <div className="empty-icon">🖼️</div>
+                                <h2>Welcome to BananaSlice</h2>
+                                <p>Open an image to get started with AI-powered generative fill</p>
+                                <button className="primary-btn" onClick={handleOpenImage} disabled={isLoading}>
+                                    {isLoading ? 'Opening...' : 'Open Image'}
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        <Canvas />
+                    )}
                 </div>
 
                 {/* Right Panel */}
@@ -96,8 +129,8 @@ function App() {
                             <div className="model-selector">
                                 <label className="input-label">Model</label>
                                 <select className="select-input">
-                                    <option value="nano-banana-pro">Nano Banana Pro</option>
-                                    <option value="nano-banana">Nano Banana</option>
+                                    <option value="nano-banana-pro">Nano Banana Pro (4K)</option>
+                                    <option value="nano-banana">Nano Banana (Fast)</option>
                                 </select>
                             </div>
 
@@ -111,7 +144,7 @@ function App() {
                                 <input type="range" min="1" max="20" defaultValue="7" className="slider" />
                             </label>
 
-                            <button className="generate-btn" disabled>
+                            <button className="generate-btn" disabled={!baseImage}>
                                 Generate Fill
                             </button>
                         </div>
@@ -136,16 +169,18 @@ function App() {
             {/* Bottom Bar */}
             <footer className="bottom-bar">
                 <div className="bottom-bar-left">
-                    <span className="status-text">Ready</span>
+                    <span className="status-text">
+                        {isLoading ? 'Loading...' : baseImage ? 'Image loaded' : 'Ready'}
+                    </span>
                 </div>
                 <div className="bottom-bar-center">
-                    <span className="coordinates">X: 0, Y: 0</span>
+                    <span className="coordinates">X: {cursorX}, Y: {cursorY}</span>
                 </div>
                 <div className="bottom-bar-right">
                     <div className="zoom-controls">
-                        <button className="zoom-btn">−</button>
-                        <span className="zoom-level">100%</span>
-                        <button className="zoom-btn">+</button>
+                        <button className="zoom-btn" onClick={zoomOut}>−</button>
+                        <span className="zoom-level">{Math.round(zoom)}%</span>
+                        <button className="zoom-btn" onClick={zoomIn}>+</button>
                     </div>
                 </div>
             </footer>
