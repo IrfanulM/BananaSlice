@@ -10,15 +10,19 @@ interface ToolState {
 
     // Brush settings
     brushSettings: BrushSettings;
+    brushSize: number;
+    brushHardness: number;
+    brushFeather: number;
 
     // Actions
     setTool: (tool: Tool) => void;
+    setActiveTool: (tool: Tool) => void;
     setBrushSize: (size: number) => void;
     setBrushHardness: (hardness: number) => void;
     setBrushFeather: (feather: number) => void;
 }
 
-export const useToolStore = create<ToolState>((set) => ({
+export const useToolStore = create<ToolState>((set, get) => ({
     // Initial state
     activeTool: 'move',
 
@@ -28,21 +32,30 @@ export const useToolStore = create<ToolState>((set) => ({
         feather: 10,
     },
 
+    brushSize: 50,
+    brushHardness: 100,
+    brushFeather: 10,
+
     // Actions
     setTool: (tool) => set({ activeTool: tool }),
+
+    setActiveTool: (tool) => set({ activeTool: tool }),
 
     setBrushSize: (size) =>
         set((state) => ({
             brushSettings: { ...state.brushSettings, size },
+            brushSize: size,
         })),
 
     setBrushHardness: (hardness) =>
         set((state) => ({
             brushSettings: { ...state.brushSettings, hardness },
+            brushHardness: hardness,
         })),
 
     setBrushFeather: (feather) =>
         set((state) => ({
             brushSettings: { ...state.brushSettings, feather },
+            brushFeather: feather,
         })),
 }));

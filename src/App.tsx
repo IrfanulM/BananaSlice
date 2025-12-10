@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Canvas } from './components/Canvas';
 import { useCanvasStore } from './store/canvasStore';
+import { useToolStore } from './store/toolStore';
 import './styles/index.css';
 
 interface AppInfo {
@@ -21,6 +22,11 @@ function App() {
         cursorX,
         cursorY
     } = useCanvasStore();
+
+    const {
+        activeTool,
+        setActiveTool
+    } = useToolStore();
 
     useEffect(() => {
         invoke<AppInfo>('get_app_info').catch(console.error);
@@ -70,17 +76,26 @@ function App() {
                 {/* Left Toolbar */}
                 <aside className="toolbar left-toolbar">
                     <div className="tool-group">
-                        <button className="tool-btn active" title="Move Tool (V)">
+                        <button
+                            className={`tool-btn ${activeTool === 'move' ? 'active' : ''}`}
+                            title="Move Tool (V)"
+                            onClick={() => setActiveTool('move')}
+                        >
                             <span className="tool-icon">✥</span>
                         </button>
-                        <button className="tool-btn" title="Brush Select (B)">
-                            <span className="tool-icon">🖌</span>
+                        <button
+                            className={`tool-btn ${activeTool === 'rectangle' ? 'active' : ''}`}
+                            title="Rectangle Marquee (M)"
+                            onClick={() => setActiveTool('rectangle')}
+                        >
+                            <span className="tool-icon">▭</span>
                         </button>
-                        <button className="tool-btn" title="Lasso Select (L)">
+                        <button
+                            className={`tool-btn ${activeTool === 'lasso' ? 'active' : ''}`}
+                            title="Lasso Select (L)"
+                            onClick={() => setActiveTool('lasso')}
+                        >
                             <span className="tool-icon">◯</span>
-                        </button>
-                        <button className="tool-btn" title="Eraser (E)">
-                            <span className="tool-icon">◻</span>
                         </button>
                     </div>
                     <div className="tool-divider"></div>
@@ -147,20 +162,6 @@ function App() {
                             <button className="generate-btn" disabled={!baseImage}>
                                 Generate Fill
                             </button>
-                        </div>
-                    </div>
-
-                    <div className="panel-section">
-                        <h3 className="panel-title">Brush Settings</h3>
-                        <div className="panel-content">
-                            <label className="input-label">
-                                Size
-                                <input type="range" min="1" max="200" defaultValue="50" className="slider" />
-                            </label>
-                            <label className="input-label">
-                                Feather
-                                <input type="range" min="0" max="100" defaultValue="10" className="slider" />
-                            </label>
                         </div>
                     </div>
                 </aside>

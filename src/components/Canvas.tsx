@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { Canvas as FabricCanvas, Image as FabricImage, Point } from 'fabric';
+import { Canvas as FabricCanvas, Image as FabricImage, Point, Rect, Polyline } from 'fabric';
 import { useCanvasStore } from '../store/canvasStore';
+import { useToolStore } from '../store/toolStore';
 
 export function Canvas() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const fabricRef = useRef<FabricCanvas | null>(null);
+    const activeSelectionRef = useRef<any>(null); // Track the current selection
 
     const {
         baseImage,
@@ -15,6 +17,10 @@ export function Canvas() {
         setZoom,
         setPan
     } = useCanvasStore();
+
+    const {
+        activeTool
+    } = useToolStore();
 
     // Initialize Fabric.js canvas
     useEffect(() => {
@@ -54,6 +60,7 @@ export function Canvas() {
             const evt = e.e as MouseEvent;
             if (evt.button === 1 || (evt.button === 0 && evt.shiftKey)) {
                 isPanning = true;
+                canvas.isDrawingMode = false;
                 canvas.selection = false;
                 lastPosX = evt.clientX;
                 lastPosY = evt.clientY;
@@ -77,7 +84,6 @@ export function Canvas() {
 
         canvas.on('mouse:up', () => {
             isPanning = false;
-            canvas.selection = true;
         });
 
         // Zoom with mouse wheel
@@ -147,13 +153,140 @@ export function Canvas() {
         };
     }, []);
 
+    // Update tool mode when activeTool changes
+    useEffect(() => {
+        if (!fabricRef.current) return;
+        const canvas = fabricRef.current;
+
+        switch (activeTool) {
+            case 'rectangle':
+            case 'lasso':
+                canvas.isDrawingMode = false;
+                canvas.selection = false;
+                break;
+
+            case 'move':
+            default:
+                canvas.isDrawingMode = false;
+                canvas.selection = true;
+        }
+    }, [activeTool]);
+
+    // Handle rectangle and lasso selection tools
+    useEffect(() => {
+        if (!fabricRef.current) return;
+        const canvas = fabricRef.current;
+
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+        let lassoPoints: Point[] = [];
+
+        // Helper to clear ANY existing selection
+        const clearSelection = () => {
+            if (activeSelectionRef.current) {
+                canvas.remove(activeSelectionRef.current);
+                activeSelectionRef.current = null;
+            }
+        };
+
+        const handleMouseDown = (e: any) => {
+            if (activeTool !== 'rectangle' && activeTool !== 'lasso') return;
+            if (!e.pointer) return;
+
+            // CRITICAL: Clear any existing selection before starting new one
+            clearSelection();
+
+            isDrawing = true;
+            startX = e.pointer.x;
+            startY = e.pointer.y;
+
+            if (activeTool === 'lasso') {
+                lassoPoints = [new Point(startX, startY)];
+            }
+        };
+
+        const handleMouseMove = (e: any) => {
+            if (!isDrawing || !e.pointer) return;
+
+            if (activeTool === 'rectangle') {
+                // Remove temporary preview
+                if (activeSelectionRef.current) {
+                    canvas.remove(activeSelectionRef.current);
+                }
+
+                const width = e.pointer.x - startX;
+                const height = e.pointer.y - startY;
+
+                activeSelectionRef.current = new Rect({
+                    left: width >= 0 ? startX : e.pointer.x,
+                    top: height >= 0 ? startY : e.pointer.y,
+                    width: Math.abs(width),
+                    height: Math.abs(height),
+                    fill: '',
+                    stroke: '#000',
+                    strokeWidth: 1,
+                    strokeDashArray: [5, 5],
+                    selectable: false,
+                    evented: false,
+                });
+
+                canvas.add(activeSelectionRef.current);
+                canvas.renderAll();
+            } else if (activeTool === 'lasso') {
+                lassoPoints.push(new Point(e.pointer.x, e.pointer.y));
+
+                // Remove temporary preview
+                if (activeSelectionRef.current) {
+                    canvas.remove(activeSelectionRef.current);
+                }
+
+                activeSelectionRef.current = new Polyline(lassoPoints, {
+                    fill: '',
+                    stroke: '#000',
+                    strokeWidth: 1,
+                    strokeDashArray: [5, 5],
+                    selectable: false,
+                    evented: false,
+                });
+
+                canvas.add(activeSelectionRef.current);
+                canvas.renderAll();
+            }
+        };
+
+        const handleMouseUp = () => {
+            // Add blue fill to the completed selection
+            if (activeSelectionRef.current) {
+                activeSelectionRef.current.set({
+                    fill: 'rgba(0, 120, 255, 0.1)',
+                });
+                canvas.renderAll();
+            }
+
+            isDrawing = false;
+            lassoPoints = [];
+        };
+
+        if (activeTool === 'rectangle' || activeTool === 'lasso') {
+            canvas.on('mouse:down', handleMouseDown);
+            canvas.on('mouse:move', handleMouseMove);
+            canvas.on('mouse:up', handleMouseUp);
+        }
+
+        return () => {
+            canvas.off('mouse:down', handleMouseDown);
+            canvas.off('mouse:move', handleMouseMove);
+            canvas.off('mouse:up', handleMouseUp);
+        };
+    }, [activeTool]);
+
     // Load image when baseImage changes
     useEffect(() => {
         if (!fabricRef.current || !baseImage) return;
 
         const canvas = fabricRef.current;
 
-        // Determine MIME type from format
         const mimeType = baseImage.format === 'jpg' || baseImage.format === 'jpeg'
             ? 'image/jpeg'
             : baseImage.format === 'webp'
@@ -162,28 +295,21 @@ export function Canvas() {
 
         const dataUrl = `data:${mimeType};base64,${baseImage.data}`;
 
-        // Load image using Promise-based API (Fabric.js v6)
         FabricImage.fromURL(dataUrl)
             .then((img) => {
-                // Remove all existing objects
                 canvas.remove(...canvas.getObjects());
 
-                // Reset canvas zoom to 1
                 canvas.setZoom(1);
 
-                // Calculate scale to fit image in 90% of canvas
                 const scaleX = (canvas.width! * 0.9) / img.width!;
                 const scaleY = (canvas.height! * 0.9) / img.height!;
                 const scale = Math.min(scaleX, scaleY);
 
-                // Apply scale to the image itself
                 img.scale(scale);
 
-                // Calculate scaled dimensions
                 const scaledWidth = img.width! * scale;
                 const scaledHeight = img.height! * scale;
 
-                // Center the scaled image
                 const centerX = (canvas.width! - scaledWidth) / 2;
                 const centerY = (canvas.height! - scaledHeight) / 2;
 
@@ -197,7 +323,6 @@ export function Canvas() {
                 canvas.add(img);
                 canvas.renderAll();
 
-                // Update zoom display (but canvas zoom stays at 100%)
                 setZoom(100);
             })
             .catch((err) => {
