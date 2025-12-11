@@ -36,8 +36,15 @@ export interface Layer {
     imageData: string; // Base64 encoded
     mask?: string; // Base64 encoded alpha mask
     visible: boolean;
-    opacity: number;
+    opacity: number; // 0-100
     order: number;
+    // Position for patch layers (edit layers are positioned patches)
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    // Blend mode
+    blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay';
 }
 
 // Generation request for Nano Banana API

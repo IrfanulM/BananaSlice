@@ -8,7 +8,7 @@ mod keystore;
 use commands::{
     get_app_info, open_image, save_image,
     generate_fill, set_api_key, has_api_key, delete_api_key,
-    composite_patch
+    composite_patch, composite_layers
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -34,7 +34,8 @@ pub fn run() {
             set_api_key,
             has_api_key,
             delete_api_key,
-            composite_patch
+            composite_patch,
+            composite_layers
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

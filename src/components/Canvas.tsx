@@ -3,11 +3,14 @@ import { Canvas as FabricCanvas, Image as FabricImage, Point, Rect, Polyline } f
 import { useCanvasStore } from '../store/canvasStore';
 import { useToolStore } from '../store/toolStore';
 import { useSelectionStore } from '../store/selectionStore';
+import { useLayerStore } from '../store/layerStore';
 
 export function Canvas() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const fabricRef = useRef<FabricCanvas | null>(null);
     const activeSelectionRef = useRef<any>(null); // Track the current selection
+    const editLayerObjectsRef = useRef<Map<string, FabricImage>>(new Map()); // Track edit layer objects
+    const baseImageObjectRef = useRef<FabricImage | null>(null);
 
     const {
         baseImage,
@@ -17,12 +20,20 @@ export function Canvas() {
         setCursorPosition,
         setZoom,
         setPan,
-        setImageTransform
+        setImageTransform,
+        imageTransform
     } = useCanvasStore();
 
     const { activeTool } = useToolStore();
 
     const { setActiveSelection } = useSelectionStore();
+
+    const {
+        layers,
+        activeLayerId,
+        setActiveLayer,
+        updateLayerTransform
+    } = useLayerStore();
 
     // Initialize Fabric.js canvas
     useEffect(() => {
@@ -42,6 +53,7 @@ export function Canvas() {
             backgroundColor: 'transparent',
             selection: false,
             renderOnAddRemove: true,
+            preserveObjectStacking: true,
         });
 
         fabricRef.current = canvas;
@@ -160,18 +172,24 @@ export function Canvas() {
         if (!fabricRef.current) return;
         const canvas = fabricRef.current;
 
-        switch (activeTool) {
-            case 'rectangle':
-            case 'lasso':
-                canvas.isDrawingMode = false;
-                canvas.selection = false;
-                break;
+        const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
 
-            case 'move':
-            default:
-                canvas.isDrawingMode = false;
-                canvas.selection = true;
-        }
+        // Toggle interactivity for all objects based on tool
+        canvas.getObjects().forEach((obj) => {
+            // Skip the temporary selection styling objects if any
+            if (obj === activeSelectionRef.current) return;
+
+            obj.set({
+                selectable: !isSelectionTool,
+                evented: !isSelectionTool,
+                hoverCursor: isSelectionTool ? 'crosshair' : 'default',
+            });
+        });
+
+        canvas.defaultCursor = isSelectionTool ? 'crosshair' : 'default';
+        canvas.selection = !isSelectionTool; // Toggle group selection box
+
+        canvas.requestRenderAll();
     }, [activeTool]);
 
     // Handle rectangle and lasso selection tools
@@ -331,17 +349,31 @@ export function Canvas() {
                 const centerX = (canvas.width! - scaledWidth) / 2;
                 const centerY = (canvas.height! - scaledHeight) / 2;
 
+                const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
+
                 img.set({
                     left: centerX,
                     top: centerY,
-                    selectable: false,
-                    evented: false,
+                    selectable: !isSelectionTool,
+                    evented: !isSelectionTool,
+                    lockMovementX: true,
+                    lockMovementY: true,
+                    lockRotation: true,
+                    lockScalingX: true,
+                    lockScalingY: true,
+                    hasControls: false,
+                    hasBorders: true,
+                    borderColor: '#3b82f6',
+                    borderScaleFactor: 2,
+                    hoverCursor: isSelectionTool ? 'crosshair' : 'default',
+                    moveCursor: 'default',
                 });
+
+                baseImageObjectRef.current = img;
 
                 canvas.add(img);
                 canvas.renderAll();
 
-                // Store the image transform so selections can be converted to image coordinates
                 setImageTransform({
                     left: centerX,
                     top: centerY,
@@ -356,15 +388,204 @@ export function Canvas() {
             });
     }, [baseImage, setZoom, setImageTransform]);
 
+    // Handle Edit Layers (Rendering & Interaction)
+    useEffect(() => {
+        const canvas = fabricRef.current;
+        if (!canvas || !imageTransform || !layers) return;
+
+        const currentObjects = editLayerObjectsRef.current;
+
+        // Find base layer ID to manage its selection state
+        const baseLayerId = layers.find(l => l.type === 'base')?.id;
+
+        const processLayers = async () => {
+            // Handle active selection setup for base layer
+            if (activeLayerId === baseLayerId && baseImageObjectRef.current) {
+                if (canvas.getActiveObject() !== baseImageObjectRef.current) {
+                    canvas.setActiveObject(baseImageObjectRef.current);
+                    canvas.requestRenderAll();
+                }
+            }
+
+            for (const layer of layers) {
+                // Skip base layer - is handled by the main image loader
+                if (layer.type === 'base') continue;
+
+                let obj = currentObjects.get(layer.id);
+
+                if (!obj) {
+                    // Create new fabric object for layer
+                    const mimeType = 'image/png';
+                    const dataUrl = `data:${mimeType};base64,${layer.imageData}`;
+
+                    try {
+                        const img = await FabricImage.fromURL(dataUrl);
+                        obj = img;
+                        currentObjects.set(layer.id, obj);
+                        canvas.add(obj);
+
+                        const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
+
+                        // Configure interaction
+                        obj.set({
+                            borderColor: '#3b82f6',
+                            cornerColor: '#3b82f6',
+                            cornerStyle: 'circle',
+                            transparentCorners: false,
+                            borderScaleFactor: 2,
+                            selectable: !isSelectionTool,
+                            evented: !isSelectionTool,
+                            hoverCursor: isSelectionTool ? 'crosshair' : 'default',
+                        });
+
+                        // Event listener for modification
+                        obj.on('modified', () => {
+                            if (!imageTransform) return;
+
+                            // Calculate new position relative to original image
+                            // Convert from Canvas (screen) -> Image Space
+                            const relativeLeft = (obj!.left! - imageTransform.left) / imageTransform.scaleX;
+                            const relativeTop = (obj!.top! - imageTransform.top) / imageTransform.scaleY;
+
+                            // Width/Height in image space
+                            const scaledWidth = obj!.width! * obj!.scaleX!;
+                            const scaledHeight = obj!.height! * obj!.scaleY!;
+
+                            const relativeWidth = scaledWidth / imageTransform.scaleX;
+                            const relativeHeight = scaledHeight / imageTransform.scaleY;
+
+                            updateLayerTransform(
+                                layer.id,
+                                Math.round(relativeLeft),
+                                Math.round(relativeTop),
+                                Math.round(relativeWidth),
+                                Math.round(relativeHeight)
+                            );
+                        });
+
+                        // Select if active
+                        if (layer.id === activeLayerId) {
+                            canvas.setActiveObject(obj);
+                        }
+                    } catch (err) {
+                        console.error('Failed to load layer image:', layer.id, err);
+                        continue;
+                    }
+                }
+
+                if (!obj) continue;
+
+                // Sync properties from store
+                const scale = imageTransform.scaleX;
+
+                // Position: BaseImageLeft + (LayerX * Scale)
+                const targetLeft = imageTransform.left + ((layer.x || 0) * scale);
+                const targetTop = imageTransform.top + ((layer.y || 0) * scale);
+
+                // Size/Scale
+                let targetScaleX = scale;
+                let targetScaleY = scale;
+
+                if (layer.width && layer.height) {
+                    targetScaleX = (layer.width * scale) / obj.width!;
+                    targetScaleY = (layer.height * scale) / obj.height!;
+                }
+
+                // Only update if significantly different to prevent render loops
+                if (Math.abs(obj.left! - targetLeft) > 1) obj.set('left', targetLeft);
+                if (Math.abs(obj.top! - targetTop) > 1) obj.set('top', targetTop);
+
+                // Opacity & Visibility
+                obj.set('opacity', layer.opacity / 100);
+                obj.set('visible', layer.visible);
+
+                // Update resize handles if size changed externally
+                if (Math.abs(obj.scaleX! - targetScaleX) > 0.01) obj.set('scaleX', targetScaleX);
+                if (Math.abs(obj.scaleY! - targetScaleY) > 0.01) obj.set('scaleY', targetScaleY);
+
+                // Update active state
+                if (layer.id === activeLayerId && canvas.getActiveObject() !== obj) {
+                    canvas.setActiveObject(obj);
+                }
+
+                obj.setCoords();
+            }
+
+            // Enforce Z-Index order to match store (Bottom -> Top)
+            layers.forEach((layer, index) => {
+                const obj = layer.type === 'base'
+                    ? baseImageObjectRef.current
+                    : currentObjects.get(layer.id);
+
+                if (obj && canvas.getObjects().indexOf(obj) !== index) {
+                    canvas.moveObjectTo(obj, index);
+                }
+            });
+
+            // Sync selection from Canvas -> Store
+            const handleSelection = (e: any) => {
+                const selected = e.selected?.[0];
+                if (!selected) return;
+
+                // Check if base layer selected
+                if (selected === baseImageObjectRef.current && baseLayerId) {
+                    setActiveLayer(baseLayerId);
+                    return;
+                }
+
+                // Check edit layers
+                for (const [id, obj] of currentObjects.entries()) {
+                    if (obj === selected) {
+                        setActiveLayer(id);
+                        break;
+                    }
+                }
+            };
+
+            const handleSelectionCleared = () => {
+                setActiveLayer(null);
+            };
+
+            canvas.off('selection:created');
+            canvas.off('selection:updated');
+            canvas.off('selection:cleared');
+
+            canvas.on('selection:created', handleSelection);
+            canvas.on('selection:updated', handleSelection);
+            canvas.on('selection:cleared', handleSelectionCleared);
+
+            // Remove objects for deleted layers
+            const layerIds = new Set(layers.map(l => l.id));
+            for (const [id, obj] of currentObjects.entries()) {
+                if (!layerIds.has(id)) {
+                    canvas.remove(obj);
+                    currentObjects.delete(id);
+                }
+            }
+
+            canvas.requestRenderAll();
+        };
+
+        processLayers();
+
+    }, [layers, imageTransform, updateLayerTransform, activeLayerId]);
+
     // Apply zoom changes from store
     useEffect(() => {
         if (!fabricRef.current) return;
         fabricRef.current.setZoom(zoom / 100);
-        fabricRef.current.renderAll();
+        fabricRef.current.requestRenderAll();
     }, [zoom]);
 
     return (
-        <div className="canvas-wrapper">
+        <div
+            className="canvas-wrapper"
+            onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                    setActiveLayer(null);
+                }
+            }}
+        >
             <canvas ref={canvasRef} />
         </div>
     );

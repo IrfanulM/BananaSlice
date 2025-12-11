@@ -3,10 +3,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Canvas } from './components/Canvas';
 import { SettingsModal } from './components/SettingsModal';
+import { LayerPanel } from './components/LayerPanel';
 import { useCanvasStore } from './store/canvasStore';
 import { useToolStore } from './store/toolStore';
 import { useSelectionStore } from './store/selectionStore';
-import { generateFill, compositePatch, hasApiKey } from './api';
+import { useLayerStore } from './store/layerStore';
+import { generateFill, hasApiKey } from './api';
 import type { AIModel } from './types';
 import './styles/index.css';
 
@@ -18,9 +20,9 @@ interface AppInfo {
 function App() {
     const {
         baseImage,
+        imagePath,
         isLoading,
         loadImage,
-        updateImageData,
         imageTransform,
         zoom,
         zoomIn,
@@ -33,6 +35,11 @@ function App() {
 
     const { activeSelection, processForAPI } = useSelectionStore();
 
+    const {
+        setBaseLayer,
+        addLayer,
+    } = useLayerStore();
+
     // UI State
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [prompt, setPrompt] = useState('');
@@ -43,6 +50,15 @@ function App() {
     useEffect(() => {
         invoke<AppInfo>('get_app_info').catch(console.error);
     }, []);
+
+    // Initialize base layer when a NEW image is loaded (not when composite updates)
+    useEffect(() => {
+        if (baseImage && imagePath) {
+            setBaseLayer(baseImage.data, baseImage.width, baseImage.height);
+        }
+    }, [imagePath, setBaseLayer]);
+    const handleLayerChange = async () => {
+    };
 
     const handleOpenImage = async () => {
         try {
@@ -115,23 +131,21 @@ function App() {
                 throw new Error(genResult.error || 'Generation failed');
             }
 
-            // Composite the result back onto the base image
-            const compResult = await compositePatch(
-                baseImage.data,
-                genResult.image_base64,
-                processed.bounds.x,
-                processed.bounds.y,
-                processed.bounds.width,
-                processed.bounds.height,
-                baseImage.format
-            );
+            // Add the generated patch as a new layer (with position info)
+            // This stores just the patch, not the full composited image
+            addLayer({
+                name: `Edit: ${prompt.substring(0, 20)}${prompt.length > 20 ? '...' : ''}`,
+                type: 'edit',
+                imageData: genResult.image_base64,
+                visible: true,
+                opacity: 100,
+                x: processed.bounds.x,
+                y: processed.bounds.y,
+                width: processed.bounds.width,
+                height: processed.bounds.height,
+            });
 
-            if (!compResult.success || !compResult.image_base64) {
-                throw new Error(compResult.error || 'Compositing failed');
-            }
 
-            // Update the base image with the composited result
-            updateImageData(compResult.image_base64);
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
@@ -265,6 +279,9 @@ function App() {
                             )}
                         </div>
                     </div>
+
+                    {/* Layer Panel */}
+                    <LayerPanel onLayerChange={handleLayerChange} />
                 </aside>
             </main>
 

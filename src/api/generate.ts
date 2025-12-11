@@ -75,6 +75,52 @@ export async function compositePatch(
     return invoke<CompositeResponse>('composite_patch', { request });
 }
 
+// === Layer Compositing ===
+
+export interface LayerData {
+    id: string;
+    image_data: string;
+    visible: boolean;
+    opacity: number; // 0-100
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    blend_mode?: string;
+}
+
+export interface CompositeLayersRequest {
+    layers: LayerData[];
+    canvas_width: number;
+    canvas_height: number;
+    format: string;
+}
+
+export interface CompositeLayersResponse {
+    success: boolean;
+    image_base64: string | null;
+    error: string | null;
+}
+
+/**
+ * Composite all visible layers into a single image
+ */
+export async function compositeLayers(
+    layers: LayerData[],
+    canvasWidth: number,
+    canvasHeight: number,
+    format: string = 'png'
+): Promise<CompositeLayersResponse> {
+    const request: CompositeLayersRequest = {
+        layers,
+        canvas_width: canvasWidth,
+        canvas_height: canvasHeight,
+        format,
+    };
+
+    return invoke<CompositeLayersResponse>('composite_layers', { request });
+}
+
 /**
  * Store the API key securely
  */
@@ -95,3 +141,4 @@ export async function hasApiKey(): Promise<boolean> {
 export async function deleteApiKey(): Promise<void> {
     return invoke('delete_api_key');
 }
+
