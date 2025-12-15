@@ -12,6 +12,7 @@ export function Canvas() {
     const editLayerObjectsRef = useRef<Map<string, FabricImage>>(new Map()); // Track edit layer objects
     const baseImageObjectRef = useRef<FabricImage | null>(null);
     const isProcessingLayersRef = useRef(false); // Prevent concurrent processing
+    const processingVersionRef = useRef(0); // Version counter for aborting stale processing
     const [baseImageReady, setBaseImageReady] = useState(false);
 
     const {
@@ -329,6 +330,8 @@ export function Canvas() {
         canvas.remove(...canvas.getObjects());
         editLayerObjectsRef.current.clear();
         baseImageObjectRef.current = null;
+        isProcessingLayersRef.current = false; // Reset processing flag
+        processingVersionRef.current++; // Increment version to abort any stale processing
         setBaseImageReady(false);
 
         const mimeType = baseImage.format === 'jpg' || baseImage.format === 'jpeg'
@@ -410,7 +413,8 @@ export function Canvas() {
         }
         isProcessingLayersRef.current = true;
 
-
+        // Capture current version to detect if we should abort
+        const currentVersion = processingVersionRef.current;
 
         const currentObjects = editLayerObjectsRef.current;
 
@@ -435,9 +439,25 @@ export function Canvas() {
         const processAllLayers = async () => {
             try {
                 const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
-                const scale = imageTransform.scaleX;
+
+                // Check if base image has actually loaded (ref-based check is synchronous)
+                if (!baseImageObjectRef.current) {
+                    return;
+                }
+
+                // Get fresh transform from store to avoid stale closure values
+                const freshTransform = useCanvasStore.getState().imageTransform;
+                if (!freshTransform) {
+                    return;
+                }
+                const scale = freshTransform.scaleX;
 
                 for (const layer of layers) {
+                    // Check if we should abort (version changed)
+                    if (processingVersionRef.current !== currentVersion) {
+                        return; // Abort this processing run
+                    }
+
                     // Skip base layer - visibility already handled above
                     if (layer.type === 'base') continue;
 
@@ -462,8 +482,8 @@ export function Canvas() {
                     if (!obj) continue;
 
                     // Calculate position and scale
-                    const targetLeft = imageTransform.left + ((layer.x || 0) * scale);
-                    const targetTop = imageTransform.top + ((layer.y || 0) * scale);
+                    const targetLeft = freshTransform.left + ((layer.x || 0) * scale);
+                    const targetTop = freshTransform.top + ((layer.y || 0) * scale);
                     let targetScaleX = scale;
                     let targetScaleY = scale;
                     if (layer.width && layer.height && obj.width && obj.height) {
