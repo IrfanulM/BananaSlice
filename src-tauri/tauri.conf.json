@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "BananaSlice - Generative Fill",
+        "title": "BananaSlice",
         "width": 1400,
         "height": 900,
         "minWidth": 1024,
@@ -38,6 +38,9 @@
     ]
   },
   "plugins": {
-    "fs": {}
+    "fs": {},
+    "window": {
+      "all": true
+    }
   }
 }

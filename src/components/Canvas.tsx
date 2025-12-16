@@ -207,6 +207,25 @@ export function Canvas() {
 
         const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
 
+        // Clear active selection when switching tools
+        canvas.discardActiveObject();
+
+        // Clear any rectangle/lasso selection overlays
+        if (activeSelectionRef.current) {
+            canvas.remove(activeSelectionRef.current);
+            activeSelectionRef.current = null;
+            setActiveSelection(null); // Clear from store too
+        }
+
+        // Update base image object properties when tool changes
+        if (baseImageObjectRef.current) {
+            baseImageObjectRef.current.set({
+                selectable: !isSelectionTool,
+                evented: !isSelectionTool,
+                hoverCursor: isSelectionTool ? 'crosshair' : 'default',
+            });
+        }
+
         // Toggle interactivity for all objects based on tool
         canvas.getObjects().forEach((obj) => {
             // Skip the temporary selection styling objects if any
@@ -222,7 +241,7 @@ export function Canvas() {
         canvas.defaultCursor = isSelectionTool ? 'crosshair' : 'default';
         canvas.selection = !isSelectionTool; // Toggle group selection box
 
-        canvas.requestRenderAll();
+        canvas.renderAll();
     }, [activeTool]);
 
     // Handle rectangle and lasso selection tools
@@ -322,10 +341,10 @@ export function Canvas() {
         };
 
         const handleMouseUp = () => {
-            // Add blue fill to the completed selection
+            // Add yellow fill to the completed selection
             if (activeSelectionRef.current) {
                 activeSelectionRef.current.set({
-                    fill: 'rgba(0, 120, 255, 0.1)',
+                    fill: 'rgba(255, 215, 0, 0.1)',
                 });
                 canvas.renderAll();
 
@@ -402,7 +421,7 @@ export function Canvas() {
                     lockScalingY: true,
                     hasControls: false,
                     hasBorders: true,
-                    borderColor: '#3b82f6',
+                    borderColor: '#FFD700',
                     borderScaleFactor: 2,
                     hoverCursor: isSelectionTool ? 'crosshair' : 'default',
                     moveCursor: 'default',
@@ -427,7 +446,7 @@ export function Canvas() {
             .catch((err) => {
                 console.error('Failed to load image:', err);
             });
-    }, [baseImage, setZoom, setImageTransform, activeTool]);
+    }, [baseImage, setZoom, setImageTransform]);
 
     // Handle Edit Layers (Rendering & Interaction)
     useEffect(() => {
@@ -456,6 +475,7 @@ export function Canvas() {
         if (baseLayer && baseImageObjectRef.current) {
             baseImageObjectRef.current.set('visible', baseLayer.visible);
             baseImageObjectRef.current.set('opacity', baseLayer.opacity / 100);
+            baseImageObjectRef.current.set('borderColor', '#FFD700');
         }
 
         // Handle active selection setup for base layer
@@ -532,8 +552,8 @@ export function Canvas() {
                         selectable: !isSelectionTool,
                         evented: !isSelectionTool,
                         hoverCursor: isSelectionTool ? 'crosshair' : 'default',
-                        borderColor: '#3b82f6',
-                        cornerColor: '#3b82f6',
+                        borderColor: '#FFD700',
+                        cornerColor: '#FFD700',
                         cornerStyle: 'circle',
                         transparentCorners: false,
                         borderScaleFactor: 2,

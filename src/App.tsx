@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Canvas } from './components/Canvas';
 import { SettingsModal } from './components/SettingsModal';
 import { LayerPanel } from './components/LayerPanel';
@@ -55,6 +56,28 @@ function App() {
     useEffect(() => {
         invoke<AppInfo>('get_app_info').catch(console.error);
     }, []);
+
+    // Update window title dynamically
+    useEffect(() => {
+        const setWindowTitle = async () => {
+            const window = getCurrentWindow();
+
+            if (!baseImage) {
+                // Nothing open
+                await window.setTitle('BananaSlice');
+            } else if (imagePath?.endsWith('.banslice')) {
+                // Project file is open - extract project name from path
+                const fileName = imagePath.split(/[\\/]/).pop() || 'Untitled Project';
+                const projectName = fileName.replace('.banslice', '');
+                await window.setTitle(`${projectName} | BananaSlice`);
+            } else {
+                // Raw image is open
+                await window.setTitle('Untitled Project | BananaSlice');
+            }
+        };
+
+        setWindowTitle().catch(console.error);
+    }, [baseImage, imagePath]);
 
     // Initialize base layer when a NEW image is loaded (skip for project files)
     useEffect(() => {
@@ -243,7 +266,7 @@ function App() {
             {/* Top Bar */}
             <header className="top-bar">
                 <div className="top-bar-left">
-                    <span className="app-logo">🍌</span>
+                    <img src="/logo.png" alt="BananaSlice" className="app-logo" />
                     <span className="app-title">BananaSlice</span>
                     <span className="app-version">v0.1.0</span>
                 </div>
@@ -312,30 +335,30 @@ function App() {
                             title="Move Tool (V)"
                             onClick={() => setActiveTool('move')}
                         >
-                            <span className="tool-icon">✥</span>
+                            <img src="/move.svg" alt="Move" className="tool-icon" />
                         </button>
                         <button
                             className={`tool-btn ${activeTool === 'rectangle' ? 'active' : ''}`}
                             title="Rectangle Marquee (M)"
                             onClick={() => setActiveTool('rectangle')}
                         >
-                            <span className="tool-icon">▭</span>
+                            <img src="/rectangle.svg" alt="Rectangle" className="tool-icon" />
                         </button>
                         <button
                             className={`tool-btn ${activeTool === 'lasso' ? 'active' : ''}`}
                             title="Lasso Select (L)"
                             onClick={() => setActiveTool('lasso')}
                         >
-                            <span className="tool-icon">◯</span>
+                            <img src="/lasso.svg" alt="Lasso" className="tool-icon" />
                         </button>
                     </div>
                     <div className="tool-divider"></div>
                     <div className="tool-group">
                         <button className="tool-btn" title="Zoom In (+)" onClick={zoomIn}>
-                            <span className="tool-icon">🔍+</span>
+                            <img src="/zoom-in.svg" alt="Zoom In" className="tool-icon" />
                         </button>
                         <button className="tool-btn" title="Zoom Out (-)" onClick={zoomOut}>
-                            <span className="tool-icon">🔍-</span>
+                            <img src="/zoom-out.svg" alt="Zoom Out" className="tool-icon" />
                         </button>
                     </div>
                 </aside>
@@ -345,11 +368,14 @@ function App() {
                     {!baseImage ? (
                         <div className="canvas-wrapper">
                             <div className="empty-state">
-                                <div className="empty-icon">🖼️</div>
+                                <img src="/logo.png" alt="BananaSlice" className="empty-icon" />
                                 <h2>Welcome to BananaSlice</h2>
                                 <p>Open an image to get started with AI-powered generative fill</p>
                                 <button className="primary-btn" onClick={handleOpenImage} disabled={isLoading}>
                                     {isLoading ? 'Opening...' : 'Open Image'}
+                                </button>
+                                <button className="primary-btn" onClick={handleLoadProject} disabled={isLoading} style={{ marginTop: '8px' }}>
+                                    Open Project
                                 </button>
                             </div>
                         </div>

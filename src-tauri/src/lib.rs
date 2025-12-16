@@ -1,4 +1,3 @@
-// BananaSlice - Generative Fill Desktop App
 // Rust backend for Tauri application
 
 mod api;

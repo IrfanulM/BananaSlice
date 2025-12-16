@@ -10,25 +10,25 @@
 
     --surface-hover: #2a2d2e;
     --surface-active: #37373d;
-    --surface-selected: #04395e;
+    --surface-selected: #7a6200;
 
     /* Accent Colors */
-    --accent-primary: #3794ff;
-    --accent-secondary: #6bb0ff;
-    --accent-subtle: rgba(55, 148, 255, 0.1);
-    --focus-ring: rgba(55, 148, 255, 0.4);
+    --accent-primary: #FFD700;
+    --accent-secondary: #FFE44D;
+    --accent-subtle: rgba(255, 215, 0, 0.1);
+    --focus-ring: rgba(255, 215, 0, 0.4);
 
     /* Text */
     --text-primary: #e8e8e8;
     --text-secondary: #999999;
     --text-disabled: #5e5e5e;
-    --text-on-accent: #ffffff;
+    --text-on-accent: #000000;
 
     /* Borders */
     --border-subtle: #333333;
     --border-medium: #3e3e3e;
     --border-strong: #555555;
-    --border-accent: #2c5d8f;
+    --border-accent: #c9a900;
 
     /* Spacing */
     --spacing-2xs: 2px;
@@ -143,8 +143,10 @@ button:focus-visible {
 }
 
 .app-logo {
-    font-size: 18px;
+    height: 20px;
+    width: auto;
     margin-right: var(--spacing-xs);
+    display: block;
 }
 
 .app-title {
@@ -365,7 +367,10 @@ button:focus-visible {
 }
 
 .tool-icon {
-    font-size: 18px;
+    width: 20px;
+    height: 20px;
+    display: block;
+    filter: brightness(0) invert(1);
 }
 
 /* Canvas Area */
@@ -430,9 +435,9 @@ button:focus-visible {
 }
 
 .empty-icon {
-    font-size: 48px;
-    color: var(--text-secondary);
-    opacity: 0.5;
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
     margin-bottom: var(--spacing-sm);
 }
 
@@ -595,7 +600,7 @@ button:focus-visible {
     justify-content: center;
     gap: var(--spacing-sm);
     background: var(--accent-primary);
-    color: white;
+    color: black;
     font-weight: var(--font-weight-medium);
     font-size: var(--font-size-sm);
     border-radius: var(--radius-sm);

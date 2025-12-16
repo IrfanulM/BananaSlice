@@ -64,8 +64,8 @@
 }
 
 .layer-item.active {
-    background: var(--surface-selected);
-    border: 2px solid #3b82f6;
+    background: transparent;
+    border: 2px solid #FFD700;
     padding: calc(var(--spacing-xs) - 1px) calc(var(--spacing-sm) - 1px);
 }
 
