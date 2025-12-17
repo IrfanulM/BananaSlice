@@ -43,6 +43,8 @@ export interface Layer {
     y?: number;
     width?: number;
     height?: number;
+    // Polygon points for lasso selections (relative to layer x,y)
+    polygonPoints?: { x: number; y: number }[];
     // Blend mode
     blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay';
 }

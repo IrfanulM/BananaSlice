@@ -8,10 +8,8 @@ export interface SelectionBounds {
 }
 
 export interface ImageTransform {
-    // Position of image on canvas
     left: number;
     top: number;
-    // Scale applied to image
     scaleX: number;
     scaleY: number;
 }
@@ -20,16 +18,18 @@ export interface ProcessedSelection {
     bounds: SelectionBounds;
     croppedImageBase64: string;
     maskBase64: string;
+    polygonMaskBase64?: string; // For masking the returned result
+    relativePolygonPoints?: PolygonPoint[]; // Polygon points relative to bounds origin
 }
 
-/**
- * Get bounding box from a Fabric.js selection object
- * Returns coordinates in CANVAS space
- */
+export interface PolygonPoint {
+    x: number;
+    y: number;
+}
+
 export function getSelectionBoundsCanvas(selectionObject: any): SelectionBounds | null {
     if (!selectionObject) return null;
 
-    // Get the bounding rect of the selection
     const boundingRect = selectionObject.getBoundingRect();
 
     return {
@@ -40,22 +40,17 @@ export function getSelectionBoundsCanvas(selectionObject: any): SelectionBounds 
     };
 }
 
-/**
- * Transform selection bounds from canvas space to original image space
- */
 export function transformToImageSpace(
     canvasBounds: SelectionBounds,
     imageTransform: ImageTransform,
     imageWidth: number,
     imageHeight: number
 ): SelectionBounds {
-    // Subtract image position, then divide by scale
     const x = Math.floor((canvasBounds.x - imageTransform.left) / imageTransform.scaleX);
     const y = Math.floor((canvasBounds.y - imageTransform.top) / imageTransform.scaleY);
     const width = Math.ceil(canvasBounds.width / imageTransform.scaleX);
     const height = Math.ceil(canvasBounds.height / imageTransform.scaleY);
 
-    // Clamp to image bounds
     return {
         x: Math.max(0, Math.min(x, imageWidth - 1)),
         y: Math.max(0, Math.min(y, imageHeight - 1)),
@@ -64,13 +59,69 @@ export function transformToImageSpace(
     };
 }
 
-/**
- * Crop a base64 image to the specified bounds
- */
+export function extractPolygonPoints(selectionObject: any): PolygonPoint[] | null {
+    if (!selectionObject) return null;
+
+    if (selectionObject.type === 'polyline' && selectionObject.points && selectionObject.points.length >= 3) {
+        // Fabric.js Polyline stores points relative to pathOffset
+        // The object's bounding rect gives us the correct canvas position
+        const boundingRect = selectionObject.getBoundingRect();
+        const points = selectionObject.points;
+
+        // Find the min of raw points to understand the offset
+        let minX = Infinity, minY = Infinity;
+        for (const pt of points) {
+            if (pt.x < minX) minX = pt.x;
+            if (pt.y < minY) minY = pt.y;
+        }
+
+        // Calculate offset: where raw points start vs where bounding rect starts
+        const offsetX = boundingRect.left - minX;
+        const offsetY = boundingRect.top - minY;
+
+        // Transform raw points to canvas coordinates
+        return points.map((pt: any) => ({
+            x: pt.x + offsetX,
+            y: pt.y + offsetY,
+        }));
+    }
+
+    return null;
+}
+
+export function transformPolygonToImageSpace(
+    canvasPoints: PolygonPoint[],
+    imageTransform: ImageTransform
+): PolygonPoint[] {
+    return canvasPoints.map(point => ({
+        x: (point.x - imageTransform.left) / imageTransform.scaleX,
+        y: (point.y - imageTransform.top) / imageTransform.scaleY,
+    }));
+}
+
+// Draw polygon path on a canvas context (relative to bounds origin)
+function drawPolygonPath(
+    ctx: CanvasRenderingContext2D,
+    polygonPoints: PolygonPoint[],
+    bounds: SelectionBounds
+) {
+    ctx.beginPath();
+    const firstPoint = polygonPoints[0];
+    ctx.moveTo(firstPoint.x - bounds.x, firstPoint.y - bounds.y);
+
+    for (let i = 1; i < polygonPoints.length; i++) {
+        const pt = polygonPoints[i];
+        ctx.lineTo(pt.x - bounds.x, pt.y - bounds.y);
+    }
+
+    ctx.closePath();
+}
+
+// Simple crop - keep all content for context (proper inpainting)
 export async function cropImageToBounds(
     imageBase64: string,
     bounds: SelectionBounds,
-    format: string = 'png'
+    format: string
 ): Promise<string> {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -85,14 +136,13 @@ export async function cropImageToBounds(
                 return;
             }
 
-            // Draw the cropped region
+            // Draw the cropped region - keep all content for context
             ctx.drawImage(
                 img,
                 bounds.x, bounds.y, bounds.width, bounds.height,
                 0, 0, bounds.width, bounds.height
             );
 
-            // Convert to base64 (strip data URL prefix)
             const dataUrl = canvas.toDataURL(`image/${format}`);
             const base64 = dataUrl.split(',')[1];
             resolve(base64);
@@ -100,7 +150,6 @@ export async function cropImageToBounds(
 
         img.onerror = () => reject(new Error('Failed to load image'));
 
-        // Handle both raw base64 and data URLs
         if (imageBase64.startsWith('data:')) {
             img.src = imageBase64;
         } else {
@@ -109,12 +158,10 @@ export async function cropImageToBounds(
     });
 }
 
-/**
- * Create a binary mask from bounds
- * White (255) = selected area, Black (0) = keep area
- */
-export async function createMaskFromBounds(
-    bounds: SelectionBounds
+// Create inpainting mask: white = edit area, black = keep for context
+export async function createInpaintingMask(
+    bounds: SelectionBounds,
+    polygonPoints?: PolygonPoint[]
 ): Promise<string> {
     return new Promise((resolve) => {
         const canvas = document.createElement('canvas');
@@ -127,21 +174,98 @@ export async function createMaskFromBounds(
             return;
         }
 
-        // For rectangle selection, entire mask is white (inpaint entire region)
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, bounds.width, bounds.height);
+        if (polygonPoints && polygonPoints.length >= 3) {
+            // Lasso: black background (context), white polygon (edit area)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, bounds.width, bounds.height);
 
-        // Convert to base64 (strip data URL prefix)
+            ctx.fillStyle = '#FFFFFF';
+            drawPolygonPath(ctx, polygonPoints, bounds);
+            ctx.fill();
+        } else {
+            // Rectangle: full white (edit everything)
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, bounds.width, bounds.height);
+        }
+
         const dataUrl = canvas.toDataURL('image/png');
         const base64 = dataUrl.split(',')[1];
         resolve(base64);
     });
 }
 
-/**
- * Process a selection for API submission
- * Returns cropped image and mask as base64
- */
+// Create full white mask for Gemini (edit everything)
+export async function createFullMask(bounds: SelectionBounds): Promise<string> {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = bounds.width;
+        canvas.height = bounds.height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            resolve('');
+            return;
+        }
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, bounds.width, bounds.height);
+
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+        resolve(base64);
+    });
+}
+
+// Create polygon mask for masking the returned result (white = keep, transparent = discard)
+// Feathers the edges for smooth blending
+export async function createPolygonMask(
+    bounds: SelectionBounds,
+    polygonPoints: PolygonPoint[],
+    featherRadius: number = 8 // pixels of edge softness
+): Promise<string> {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = bounds.width;
+        canvas.height = bounds.height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            resolve('');
+            return;
+        }
+
+        // Draw the polygon with opaque white
+        ctx.fillStyle = '#FFFFFF';
+        drawPolygonPath(ctx, polygonPoints, bounds);
+        ctx.fill();
+
+        // Apply blur for feathered edges
+        if (featherRadius > 0) {
+            ctx.filter = `blur(${featherRadius}px)`;
+
+            // Create temp canvas to apply blur
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = bounds.width;
+            tempCanvas.height = bounds.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            if (tempCtx) {
+                tempCtx.filter = `blur(${featherRadius}px)`;
+                tempCtx.drawImage(canvas, 0, 0);
+
+                // Copy back
+                ctx.clearRect(0, 0, bounds.width, bounds.height);
+                ctx.filter = 'none';
+                ctx.drawImage(tempCanvas, 0, 0);
+            }
+        }
+
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+        resolve(base64);
+    });
+}
+
 export async function processSelectionForAPI(
     selectionObject: any,
     imageBase64: string,
@@ -150,17 +274,11 @@ export async function processSelectionForAPI(
     imageWidth: number,
     imageHeight: number
 ): Promise<ProcessedSelection | null> {
-    // Get canvas-space bounds
     const canvasBounds = getSelectionBoundsCanvas(selectionObject);
     if (!canvasBounds || canvasBounds.width <= 0 || canvasBounds.height <= 0) {
         return null;
     }
 
-    console.log('Canvas bounds:', canvasBounds);
-    console.log('Image transform:', imageTransform);
-    console.log('Image dimensions:', imageWidth, imageHeight);
-
-    // Transform to image space
     const imageBounds = transformToImageSpace(
         canvasBounds,
         imageTransform,
@@ -168,23 +286,98 @@ export async function processSelectionForAPI(
         imageHeight
     );
 
-    console.log('Image bounds:', imageBounds);
-
     if (imageBounds.width <= 0 || imageBounds.height <= 0) {
         console.error('Selection is outside image bounds');
         return null;
     }
 
-    // Crop the source image using IMAGE coordinates
-    const croppedImageBase64 = await cropImageToBounds(imageBase64, imageBounds, imageFormat);
+    // Extract polygon points for lasso selections
+    const canvasPolygonPoints = extractPolygonPoints(selectionObject);
+    let imagePolygonPoints: PolygonPoint[] | undefined;
 
-    // Create the mask (simple white rectangle for now)
-    const maskBase64 = await createMaskFromBounds(imageBounds);
+    if (canvasPolygonPoints) {
+        imagePolygonPoints = transformPolygonToImageSpace(canvasPolygonPoints, imageTransform);
+    }
+
+    // Crop the full region - keep all content for context
+    const croppedImageBase64 = await cropImageToBounds(
+        imageBase64,
+        imageBounds,
+        imageFormat
+    );
+
+    // Create inpainting mask: white = edit area, black = context for blending
+    const maskBase64 = await createInpaintingMask(imageBounds, imagePolygonPoints);
+
+    // For lasso, also create an alpha mask to apply to the returned result
+    let polygonMaskBase64: string | undefined;
+    let relativePolygonPoints: PolygonPoint[] | undefined;
+
+    if (imagePolygonPoints && imagePolygonPoints.length >= 3) {
+        polygonMaskBase64 = await createPolygonMask(imageBounds, imagePolygonPoints);
+
+        // Store points relative to bounds origin (for layer display)
+        relativePolygonPoints = imagePolygonPoints.map(pt => ({
+            x: pt.x - imageBounds.x,
+            y: pt.y - imageBounds.y,
+        }));
+    }
 
     return {
         bounds: imageBounds,
         croppedImageBase64,
         maskBase64,
+        polygonMaskBase64,
+        relativePolygonPoints,
     };
 }
 
+// Apply polygon mask to the returned image (make outside transparent)
+export async function applyPolygonMaskToResult(
+    resultImageBase64: string,
+    polygonMaskBase64: string,
+    targetWidth: number,
+    targetHeight: number
+): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const resultImg = new Image();
+        const maskImg = new Image();
+
+        let loadedCount = 0;
+        const onBothLoaded = () => {
+            loadedCount++;
+            if (loadedCount < 2) return;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                reject(new Error('Could not get canvas context'));
+                return;
+            }
+
+            // Draw result image scaled to target size
+            ctx.drawImage(resultImg, 0, 0, targetWidth, targetHeight);
+
+            // Apply mask using destination-in composite
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.drawImage(maskImg, 0, 0, targetWidth, targetHeight);
+
+            const dataUrl = canvas.toDataURL('image/png');
+            const base64 = dataUrl.split(',')[1];
+            resolve(base64);
+        };
+
+        resultImg.onload = onBothLoaded;
+        maskImg.onload = onBothLoaded;
+        resultImg.onerror = () => reject(new Error('Failed to load result image'));
+        maskImg.onerror = () => reject(new Error('Failed to load mask image'));
+
+        resultImg.src = resultImageBase64.startsWith('data:')
+            ? resultImageBase64
+            : `data:image/png;base64,${resultImageBase64}`;
+        maskImg.src = `data:image/png;base64,${polygonMaskBase64}`;
+    });
+}

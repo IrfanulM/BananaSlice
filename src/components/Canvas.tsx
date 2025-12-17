@@ -10,6 +10,7 @@ export function Canvas() {
     const fabricRef = useRef<FabricCanvas | null>(null);
     const activeSelectionRef = useRef<any>(null); // Track the current selection
     const editLayerObjectsRef = useRef<Map<string, FabricImage>>(new Map()); // Track edit layer objects
+    const polygonOutlineRef = useRef<Polyline | null>(null); // Track polygon outline for active layer
     const baseImageObjectRef = useRef<FabricImage | null>(null);
     const isProcessingLayersRef = useRef(false); // Prevent concurrent processing
     const processingVersionRef = useRef(0); // Version counter for aborting stale processing
@@ -212,6 +213,7 @@ export function Canvas() {
 
         // Clear any rectangle/lasso selection overlays
         if (activeSelectionRef.current) {
+
             canvas.remove(activeSelectionRef.current);
             activeSelectionRef.current = null;
             setActiveSelection(null); // Clear from store too
@@ -515,11 +517,19 @@ export function Canvas() {
 
                     // Create new fabric object if needed
                     if (!obj) {
-                        const mimeType = 'image/png';
-                        const dataUrl = `data:${mimeType};base64,${layer.imageData}`;
+                        // Gemini returns base64 encoded images (might be PNG or JPEG)
+                        const dataUrl = layer.imageData.startsWith('data:')
+                            ? layer.imageData
+                            : `data:image/png;base64,${layer.imageData}`;
 
                         try {
                             const img = await FabricImage.fromURL(dataUrl);
+
+                            if (!img.width || !img.height || img.width <= 0 || img.height <= 0) {
+                                console.error('Layer image has invalid dimensions:', layer.id, img.width, img.height);
+                                continue;
+                            }
+
                             obj = img;
                             currentObjects.set(layer.id, obj);
                             canvas.add(obj);
@@ -534,12 +544,16 @@ export function Canvas() {
                     // Calculate position and scale
                     const targetLeft = freshTransform.left + ((layer.x || 0) * scale);
                     const targetTop = freshTransform.top + ((layer.y || 0) * scale);
-                    let targetScaleX = scale;
-                    let targetScaleY = scale;
-                    if (layer.width && layer.height && obj.width && obj.height) {
-                        targetScaleX = (layer.width * scale) / obj.width;
-                        targetScaleY = (layer.height * scale) / obj.height;
-                    }
+
+                    // Calculate target dimensions on canvas
+                    const targetCanvasWidth = (layer.width || obj.width || 100) * scale;
+                    const targetCanvasHeight = (layer.height || obj.height || 100) * scale;
+
+                    // Calculate scale factor to fit the image to target dimensions
+                    const imgWidth = obj.width || 1;
+                    const imgHeight = obj.height || 1;
+                    const targetScaleX = targetCanvasWidth / imgWidth;
+                    const targetScaleY = targetCanvasHeight / imgHeight;
 
                     // Apply ALL properties
                     obj.set({
@@ -587,6 +601,58 @@ export function Canvas() {
                     if (!layerIds.has(id)) {
                         canvas.remove(obj);
                         currentObjects.delete(id);
+                    }
+                }
+
+                // CLEANUP: Remove any untracked objects (duplicates, orphans)
+                const allCanvasObjects = canvas.getObjects();
+                for (const obj of allCanvasObjects) {
+                    const isBase = obj === baseImageObjectRef.current;
+                    const isSelection = obj === activeSelectionRef.current;
+                    const isPolygonOutline = obj === polygonOutlineRef.current;
+                    let isTrackedLayer = false;
+                    for (const layerObj of currentObjects.values()) {
+                        if (layerObj === obj) {
+                            isTrackedLayer = true;
+                            break;
+                        }
+                    }
+
+                    // Remove if not base, not selection, not polygon outline, and not a tracked layer
+                    if (!isBase && !isSelection && !isPolygonOutline && !isTrackedLayer) {
+                        canvas.remove(obj);
+                    }
+                }
+
+                // Draw polygon outline for active layer if it has polygon points
+                if (polygonOutlineRef.current) {
+                    canvas.remove(polygonOutlineRef.current);
+                    polygonOutlineRef.current = null;
+                }
+
+                const activeLayer = layers.find(l => l.id === activeLayerId);
+                if (activeLayer && activeLayer.polygonPoints && activeLayer.polygonPoints.length >= 3) {
+                    const layerObj = currentObjects.get(activeLayer.id);
+                    if (layerObj) {
+                        // Transform polygon points to canvas coordinates
+                        const canvasPoints = activeLayer.polygonPoints.map(pt => {
+                            // Points are relative to layer bounds, so add layer position and apply scale
+                            const x = layerObj.left! + (pt.x * layerObj.scaleX!);
+                            const y = layerObj.top! + (pt.y * layerObj.scaleY!);
+                            return new Point(x, y);
+                        });
+
+                        // Create polygon outline
+                        polygonOutlineRef.current = new Polyline(canvasPoints, {
+                            fill: '',
+                            stroke: '#FFD700',
+                            strokeWidth: 1,
+                            strokeDashArray: [3, 3],
+                            selectable: false,
+                            evented: false,
+                        });
+
+                        canvas.add(polygonOutlineRef.current);
                     }
                 }
 
@@ -649,6 +715,30 @@ export function Canvas() {
                     Math.round(relativeHeight)
                 );
             });
+
+            // Update polygon outline during move/scale (real-time)
+            const updatePolygonOutline = () => {
+                if (!polygonOutlineRef.current) return;
+
+                // Find the layer for this object
+                const layer = layers.find(l => l.id === layerId);
+                if (!layer || !layer.polygonPoints || layer.polygonPoints.length < 3) return;
+
+                // Recalculate polygon points based on current object position
+                const points = layer.polygonPoints.map(pt => {
+                    const x = obj.left! + (pt.x * obj.scaleX!);
+                    const y = obj.top! + (pt.y * obj.scaleY!);
+                    return new Point(x, y);
+                });
+
+                polygonOutlineRef.current.set({ points });
+                polygonOutlineRef.current.setCoords();
+            };
+
+            obj.off('moving');
+            obj.off('scaling');
+            obj.on('moving', updatePolygonOutline);
+            obj.on('scaling', updatePolygonOutline);
         }
 
     }, [layers, imageTransform, updateLayerTransform, activeLayerId, baseImageReady, activeTool, setActiveLayer]);

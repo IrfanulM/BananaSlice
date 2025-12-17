@@ -38,7 +38,7 @@ function App() {
 
     const { activeTool, setActiveTool } = useToolStore();
 
-    const { activeSelection, processForAPI } = useSelectionStore();
+    const { activeSelection, processForAPI, clearSelection } = useSelectionStore();
 
     const {
         setBaseLayer,
@@ -258,21 +258,35 @@ function App() {
                 throw new Error(genResult.error || 'Generation failed');
             }
 
-            // Add the generated patch as a new layer (with position info)
-            // This stores just the patch, not the full composited image
+            // Apply polygon mask to result if this was a lasso selection
+            let finalImageBase64 = genResult.image_base64;
+            if (processed.polygonMaskBase64) {
+                const { applyPolygonMaskToResult } = await import('./utils/selectionProcessor');
+                finalImageBase64 = await applyPolygonMaskToResult(
+                    genResult.image_base64,
+                    processed.polygonMaskBase64,
+                    processed.bounds.width,
+                    processed.bounds.height
+                );
+            }
+
+            // Add the generated patch as a new layer
             addLayer({
                 name: `Edit: ${prompt.substring(0, 20)}${prompt.length > 20 ? '...' : ''}`,
                 type: 'edit',
-                imageData: genResult.image_base64,
+                imageData: finalImageBase64,
                 visible: true,
                 opacity: 100,
                 x: processed.bounds.x,
                 y: processed.bounds.y,
                 width: processed.bounds.width,
                 height: processed.bounds.height,
+                polygonPoints: processed.relativePolygonPoints,
             });
 
-
+            // Clear selection and switch to move tool
+            clearSelection();
+            setActiveTool('move');
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
