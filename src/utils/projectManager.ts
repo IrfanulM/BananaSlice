@@ -96,7 +96,7 @@ export const saveProjectAs = async (): Promise<string | null> => {
 // Legacy alias
 export const saveProject = saveProjectAs;
 
-export const loadProject = async (): Promise<{ success: boolean; error?: string }> => {
+export const loadProject = async (): Promise<{ success: boolean; error?: string; path?: string }> => {
     const filePath = await open({
         filters: [{
             name: 'BananaSlice Project',
@@ -145,7 +145,7 @@ export const loadProject = async (): Promise<{ success: boolean; error?: string 
         // Reset history for the new project
         useHistoryStore.getState().reset();
 
-        return { success: true };
+        return { success: true, path: filePath };
     } catch (err) {
         console.error('Failed to load project:', err);
         return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };

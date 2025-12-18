@@ -7,11 +7,16 @@ import { SettingsModal } from './components/SettingsModal';
 import { LayerPanel } from './components/LayerPanel';
 import { ProgressIndicator, type ProgressStage } from './components/ProgressIndicator';
 import { Tooltip } from './components/Tooltip';
+import { ToastContainer } from './components/Toast';
+import { KeyboardShortcuts } from './components/KeyboardShortcuts';
+import { toast } from './store/toastStore';
 import { useCanvasStore } from './store/canvasStore';
 import { useToolStore } from './store/toolStore';
 import { useSelectionStore } from './store/selectionStore';
 import { useLayerStore } from './store/layerStore';
 import { useHistoryStore } from './store/historyStore';
+import { useSettingsStore } from './store/settingsStore';
+import { useRecentFilesStore } from './store/recentFilesStore';
 import { generateFill, hasApiKey } from './api';
 import { saveProject, loadProject, quickSave } from './utils/projectManager';
 import { exportImage } from './utils/exportManager';
@@ -58,14 +63,20 @@ function App() {
     // UI State
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [fileMenuOpen, setFileMenuOpen] = useState(false);
+    const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const fileMenuRef = useRef<HTMLDivElement>(null);
     const [prompt, setPrompt] = useState('');
-    const [model, setModel] = useState<AIModel>('nano-banana-pro');
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationStage, setGenerationStage] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+
+    // Recent files
+    const { recentFiles, addRecentFile } = useRecentFilesStore();
+
+    // Model preference from persistent settings store
+    const { defaultModel: model, setDefaultModel: setModel } = useSettingsStore();
 
     // Generation stage labels
     const generationStages = [
@@ -87,27 +98,31 @@ function App() {
         invoke<AppInfo>('get_app_info').catch(console.error);
     }, []);
 
-    // Update window title dynamically
+    // Check for unsaved changes (history has more than 1 state = changes made)
+    const hasUnsavedChanges = canUndo();
+
+    // Update window title dynamically (with asterisk for unsaved changes)
     useEffect(() => {
         const setWindowTitle = async () => {
             const window = getCurrentWindow();
+            const unsavedMarker = hasUnsavedChanges ? '*' : '';
 
             if (!baseImage) {
                 // Nothing open
                 await window.setTitle('BananaSlice');
             } else if (imagePath?.endsWith('.banslice')) {
                 // Project file is open - extract project name from path
-                const fileName = imagePath.split(/[\\/]/).pop() || 'Untitled Project';
+                const fileName = imagePath.split(/[\\\\/]/).pop() || 'Untitled Project';
                 const projectName = fileName.replace('.banslice', '');
-                await window.setTitle(`${projectName} | BananaSlice`);
+                await window.setTitle(`${unsavedMarker}${projectName} | BananaSlice`);
             } else {
                 // Raw image is open
-                await window.setTitle('Untitled Project | BananaSlice');
+                await window.setTitle(`${unsavedMarker}Untitled Project | BananaSlice`);
             }
         };
 
         setWindowTitle().catch(console.error);
-    }, [baseImage, imagePath]);
+    }, [baseImage, imagePath, hasUnsavedChanges]);
 
     // Initialize base layer when a NEW image is loaded (skip for project files)
     useEffect(() => {
@@ -139,9 +154,10 @@ function App() {
         setIsSaving(true);
         try {
             await quickSave();
-            console.log('Project saved');
+            toast.success('Project saved successfully');
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to save');
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            toast.error(`Failed to save project: ${message}`);
         } finally {
             setIsSaving(false);
         }
@@ -153,10 +169,12 @@ function App() {
         try {
             const path = await saveProject();
             if (path) {
-                console.log('Project saved to:', path);
+                const fileName = path.split(/[\\/]/).pop() || 'project';
+                toast.success(`Saved as ${fileName}`);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to save project');
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            toast.error(`Failed to save project: ${message}`);
         } finally {
             setIsSaving(false);
         }
@@ -166,11 +184,17 @@ function App() {
         setFileMenuOpen(false);
         try {
             const result = await loadProject();
-            if (!result.success && result.error) {
-                setError(result.error);
+            if (result.success) {
+                toast.success('Project loaded successfully');
+                if (result.path) {
+                    addRecentFile(result.path, 'project');
+                }
+            } else if (result.error) {
+                toast.error(`Failed to load project: ${result.error}`);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load project');
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            toast.error(`Failed to load project: ${message}`);
         }
     };
 
@@ -180,10 +204,12 @@ function App() {
         try {
             const path = await exportImage({ format, quality: 92 });
             if (path) {
-                console.log('Exported to:', path);
+                const fileName = path.split(/[\\/]/).pop() || 'image';
+                toast.success(`Exported as ${fileName}`);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to export');
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            toast.error(`Export failed: ${message}`);
         } finally {
             setIsExporting(false);
         }
@@ -233,8 +259,8 @@ function App() {
                     case 'l':
                         setActiveTool('lasso');
                         break;
-                    case 'escape':
-                        // Clear selection
+                    case 'd':
+                        // Deselect - clear selection
                         clearSelection();
                         break;
                     case '=':
@@ -268,6 +294,7 @@ function App() {
 
             if (selected && typeof selected === 'string') {
                 await loadImage(selected);
+                addRecentFile(selected, 'image');
             }
         } catch (error) {
             console.error('Failed to open image:', error);
@@ -361,8 +388,12 @@ function App() {
             clearSelection();
             setActiveTool('move');
 
+            toast.success('Generation complete! New layer added.');
+
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            const message = err instanceof Error ? err.message : 'An unexpected error occurred';
+            setError(message);
+            toast.error(`Generation failed: ${message}`);
         } finally {
             setIsGenerating(false);
         }
@@ -372,6 +403,9 @@ function App() {
         <div className="app">
             {/* Settings Modal */}
             <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+            {/* Keyboard Shortcuts Modal */}
+            <KeyboardShortcuts isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
             {/* Top Bar */}
             <header className="top-bar">
@@ -396,6 +430,32 @@ function App() {
                                 <button onClick={handleLoadProject}>
                                     Open Project...
                                 </button>
+                                {recentFiles.length > 0 && (
+                                    <div className="submenu-container">
+                                        <button className="submenu-trigger">
+                                            Recent Files
+                                            <span className="submenu-arrow">▶</span>
+                                        </button>
+                                        <div className="submenu">
+                                            {recentFiles.slice(0, 5).map((file) => (
+                                                <button
+                                                    key={file.path}
+                                                    onClick={async () => {
+                                                        setFileMenuOpen(false);
+                                                        if (file.type === 'project') {
+                                                            await loadProject();
+                                                        } else {
+                                                            await loadImage(file.path);
+                                                        }
+                                                    }}
+                                                    title={file.path}
+                                                >
+                                                    {file.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="menu-divider" />
                                 <button onClick={handleQuickSave} disabled={!isProject}>
                                     Save
@@ -428,6 +488,7 @@ function App() {
                     <button className="top-bar-btn">Edit</button>
                     <button className="top-bar-btn">View</button>
                     <button className="top-bar-btn" onClick={() => setSettingsOpen(true)}>Settings</button>
+                    <button className="top-bar-btn" onClick={() => setShortcutsOpen(true)}>Help</button>
                 </div>
                 <div className="top-bar-right">
                     <Tooltip content="Undo" shortcut="Ctrl+Z" position="bottom">
@@ -502,7 +563,7 @@ function App() {
                 </aside>
 
                 {/* Canvas Area */}
-                <div className={`canvas-container ${baseImage ? 'has-image' : ''}`}>
+                <div className={`canvas-container ${baseImage ? 'has-image' : ''} tool-${activeTool}`}>
                     {/* Progress Overlays */}
                     <ProgressIndicator
                         visible={isGenerating}
@@ -643,6 +704,9 @@ function App() {
                     </div>
                 </div>
             </footer>
+
+            {/* Toast Notifications */}
+            <ToastContainer />
         </div>
     );
 }

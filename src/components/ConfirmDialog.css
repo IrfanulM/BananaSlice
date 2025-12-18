@@ -1,0 +1,92 @@
+/* Confirmation Dialog Styles */
+
+.confirm-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    backdrop-filter: blur(2px);
+}
+
+.confirm-dialog {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-popup);
+    min-width: 320px;
+    max-width: 440px;
+}
+
+.confirm-dialog-header {
+    padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-sm);
+}
+
+.confirm-dialog-header h3 {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.confirm-dialog-body {
+    padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-lg);
+}
+
+.confirm-dialog-body p {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.confirm-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--bg-app);
+    border-top: 1px solid var(--border-subtle);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.confirm-dialog-btn {
+    padding: 8px 16px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.confirm-dialog-btn.cancel {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-medium);
+}
+
+.confirm-dialog-btn.cancel:hover {
+    background: var(--surface-hover);
+}
+
+.confirm-dialog-btn.confirm {
+    background: var(--accent-primary);
+    color: var(--text-on-accent);
+}
+
+.confirm-dialog-btn.confirm:hover {
+    background: var(--accent-secondary);
+}
+
+.confirm-dialog-btn.danger {
+    background: #ef4444;
+    color: white;
+}
+
+.confirm-dialog-btn.danger:hover {
+    background: #dc2626;
+}

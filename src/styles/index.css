@@ -429,6 +429,25 @@ button:focus-visible {
     z-index: 100;
 }
 
+/* Cursor states for different tools */
+.canvas-container.tool-move {
+    cursor: grab;
+}
+
+.canvas-container.tool-move.is-panning {
+    cursor: grabbing;
+}
+
+.canvas-container.tool-rectangle,
+.canvas-container.tool-lasso {
+    cursor: crosshair;
+}
+
+.canvas-container.tool-rectangle.is-drawing,
+.canvas-container.tool-lasso.is-drawing {
+    cursor: crosshair;
+}
+
 .empty-state {
     display: flex;
     flex-direction: column;

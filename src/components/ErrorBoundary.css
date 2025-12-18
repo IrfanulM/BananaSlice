@@ -1,0 +1,93 @@
+/* Error Boundary Styles */
+
+.error-boundary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+    background: var(--bg-app);
+    padding: var(--spacing-xl);
+}
+
+.error-boundary-content {
+    text-align: center;
+    max-width: 480px;
+}
+
+.error-boundary-icon {
+    font-size: 48px;
+    margin-bottom: var(--spacing-lg);
+}
+
+.error-boundary h2 {
+    font-size: 20px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.error-boundary-message {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-xl);
+    line-height: 1.5;
+}
+
+.error-boundary-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: center;
+    margin-bottom: var(--spacing-xl);
+}
+
+.error-boundary-btn {
+    padding: 8px 16px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.error-boundary-btn.primary {
+    background: var(--accent-primary);
+    color: var(--text-on-accent);
+}
+
+.error-boundary-btn.primary:hover {
+    background: var(--accent-secondary);
+}
+
+.error-boundary-btn.secondary {
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-medium);
+}
+
+.error-boundary-btn.secondary:hover {
+    background: var(--surface-hover);
+}
+
+.error-boundary-details {
+    text-align: left;
+    margin-top: var(--spacing-lg);
+}
+
+.error-boundary-details summary {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    cursor: pointer;
+    margin-bottom: var(--spacing-sm);
+}
+
+.error-boundary-details pre {
+    font-size: var(--font-size-2xs);
+    color: var(--text-secondary);
+    background: var(--bg-input);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    max-height: 200px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
