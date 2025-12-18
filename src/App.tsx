@@ -5,6 +5,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Canvas } from './components/Canvas';
 import { SettingsModal } from './components/SettingsModal';
 import { LayerPanel } from './components/LayerPanel';
+import { ProgressIndicator, type ProgressStage } from './components/ProgressIndicator';
+import { Tooltip } from './components/Tooltip';
 import { useCanvasStore } from './store/canvasStore';
 import { useToolStore } from './store/toolStore';
 import { useSelectionStore } from './store/selectionStore';
@@ -60,7 +62,26 @@ function App() {
     const [prompt, setPrompt] = useState('');
     const [model, setModel] = useState<AIModel>('nano-banana-pro');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [generationStage, setGenerationStage] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+
+    // Generation stage labels
+    const generationStages = [
+        'Processing selection',
+        'Generating with AI',
+        'Applying result',
+    ];
+
+    // Create progress stages based on current stage
+    const getProgressStages = (): ProgressStage[] => {
+        return generationStages.map((label, index) => ({
+            id: `stage-${index}`,
+            label,
+            status: index < generationStage ? 'complete' : index === generationStage ? 'active' : 'pending',
+        }));
+    };
 
     useEffect(() => {
         invoke<AppInfo>('get_app_info').catch(console.error);
@@ -115,16 +136,20 @@ function App() {
     const handleQuickSave = async () => {
         setFileMenuOpen(false);
         if (!isProject) return;
+        setIsSaving(true);
         try {
             await quickSave();
             console.log('Project saved');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to save');
+        } finally {
+            setIsSaving(false);
         }
     };
 
     const handleSaveProject = async () => {
         setFileMenuOpen(false);
+        setIsSaving(true);
         try {
             const path = await saveProject();
             if (path) {
@@ -132,6 +157,8 @@ function App() {
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to save project');
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -149,6 +176,7 @@ function App() {
 
     const handleExport = async (format: ExportFormat) => {
         setFileMenuOpen(false);
+        setIsExporting(true);
         try {
             const path = await exportImage({ format, quality: 92 });
             if (path) {
@@ -156,14 +184,22 @@ function App() {
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to export');
+        } finally {
+            setIsExporting(false);
         }
     };
 
 
-    // Keyboard shortcuts: Ctrl+S, Ctrl+Z, Ctrl+Y
+    // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = async (e: KeyboardEvent) => {
-            // Save shortcuts
+            // Don't trigger shortcuts when typing in inputs
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                return;
+            }
+
+            // Save shortcuts: Ctrl+S
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
                 if (isProject) {
@@ -172,20 +208,53 @@ function App() {
                     await handleSaveProject();
                 }
             }
+
             // Undo: Ctrl+Z
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
                 e.preventDefault();
                 handleUndo();
             }
+
             // Redo: Ctrl+Y or Ctrl+Shift+Z
             if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
                 e.preventDefault();
                 handleRedo();
             }
+
+            // Tool shortcuts (only when not holding modifier keys)
+            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+                switch (e.key.toLowerCase()) {
+                    case 'v':
+                        setActiveTool('move');
+                        break;
+                    case 'm':
+                        setActiveTool('rectangle');
+                        break;
+                    case 'l':
+                        setActiveTool('lasso');
+                        break;
+                    case 'escape':
+                        // Clear selection
+                        clearSelection();
+                        break;
+                    case '=':
+                    case '+':
+                        // Zoom in
+                        e.preventDefault();
+                        zoomIn();
+                        break;
+                    case '-':
+                    case '_':
+                        // Zoom out
+                        e.preventDefault();
+                        zoomOut();
+                        break;
+                }
+            }
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isProject, baseImage]);
+    }, [isProject, baseImage, setActiveTool, clearSelection, zoomIn, zoomOut]);
 
     const handleOpenImage = async () => {
         try {
@@ -225,6 +294,7 @@ function App() {
         }
 
         setIsGenerating(true);
+        setGenerationStage(0);
         setError(null);
 
         try {
@@ -233,7 +303,8 @@ function App() {
                 throw new Error('Image transform not available. Please reload the image.');
             }
 
-            // Process selection to get cropped image and mask
+            // Stage 1: Process selection to get cropped image and mask
+            setGenerationStage(0);
             const processed = await processForAPI(
                 baseImage.data,
                 baseImage.format,
@@ -246,7 +317,8 @@ function App() {
                 throw new Error('Failed to process selection');
             }
 
-            // Call generate API
+            // Stage 2: Call generate API
+            setGenerationStage(1);
             const genResult = await generateFill(
                 model,
                 prompt,
@@ -258,7 +330,8 @@ function App() {
                 throw new Error(genResult.error || 'Generation failed');
             }
 
-            // Apply polygon mask to result if this was a lasso selection
+            // Stage 3: Apply polygon mask to result if this was a lasso selection
+            setGenerationStage(2);
             let finalImageBase64 = genResult.image_base64;
             if (processed.polygonMaskBase64) {
                 const { applyPolygonMaskToResult } = await import('./utils/selectionProcessor');
@@ -357,22 +430,26 @@ function App() {
                     <button className="top-bar-btn" onClick={() => setSettingsOpen(true)}>Settings</button>
                 </div>
                 <div className="top-bar-right">
-                    <button
-                        className="top-bar-btn icon-btn"
-                        title="Undo (Ctrl+Z)"
-                        onClick={handleUndo}
-                        disabled={!canUndo()}
-                    >
-                        ↩
-                    </button>
-                    <button
-                        className="top-bar-btn icon-btn"
-                        title="Redo (Ctrl+Y)"
-                        onClick={handleRedo}
-                        disabled={!canRedo()}
-                    >
-                        ↪
-                    </button>
+                    <Tooltip content="Undo" shortcut="Ctrl+Z" position="bottom">
+                        <button
+                            className="top-bar-btn icon-btn"
+                            onClick={handleUndo}
+                            disabled={!canUndo()}
+                            aria-label="Undo"
+                        >
+                            ↩
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Redo" shortcut="Ctrl+Y" position="bottom">
+                        <button
+                            className="top-bar-btn icon-btn"
+                            onClick={handleRedo}
+                            disabled={!canRedo()}
+                            aria-label="Redo"
+                        >
+                            ↪
+                        </button>
+                    </Tooltip>
                 </div>
             </header>
 
@@ -381,41 +458,72 @@ function App() {
                 {/* Left Toolbar */}
                 <aside className="toolbar left-toolbar">
                     <div className="tool-group">
-                        <button
-                            className={`tool-btn ${activeTool === 'move' ? 'active' : ''}`}
-                            title="Move Tool (V)"
-                            onClick={() => setActiveTool('move')}
-                        >
-                            <img src="/move.svg" alt="Move" className="tool-icon" />
-                        </button>
-                        <button
-                            className={`tool-btn ${activeTool === 'rectangle' ? 'active' : ''}`}
-                            title="Rectangle Marquee (M)"
-                            onClick={() => setActiveTool('rectangle')}
-                        >
-                            <img src="/rectangle.svg" alt="Rectangle" className="tool-icon" />
-                        </button>
-                        <button
-                            className={`tool-btn ${activeTool === 'lasso' ? 'active' : ''}`}
-                            title="Lasso Select (L)"
-                            onClick={() => setActiveTool('lasso')}
-                        >
-                            <img src="/lasso.svg" alt="Lasso" className="tool-icon" />
-                        </button>
+                        <Tooltip content="Move Tool" shortcut="V" position="right" description="Select and move layers">
+                            <button
+                                className={`tool-btn ${activeTool === 'move' ? 'active' : ''}`}
+                                onClick={() => setActiveTool('move')}
+                                aria-label="Move Tool"
+                            >
+                                <img src="/move.svg" alt="Move" className="tool-icon" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip content="Rectangle Select" shortcut="M" position="right" description="Draw rectangular selections">
+                            <button
+                                className={`tool-btn ${activeTool === 'rectangle' ? 'active' : ''}`}
+                                onClick={() => setActiveTool('rectangle')}
+                                aria-label="Rectangle Select"
+                            >
+                                <img src="/rectangle.svg" alt="Rectangle" className="tool-icon" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip content="Lasso Select" shortcut="L" position="right" description="Draw freeform selections">
+                            <button
+                                className={`tool-btn ${activeTool === 'lasso' ? 'active' : ''}`}
+                                onClick={() => setActiveTool('lasso')}
+                                aria-label="Lasso Select"
+                            >
+                                <img src="/lasso.svg" alt="Lasso" className="tool-icon" />
+                            </button>
+                        </Tooltip>
                     </div>
                     <div className="tool-divider"></div>
                     <div className="tool-group">
-                        <button className="tool-btn" title="Zoom In (+)" onClick={zoomIn}>
-                            <img src="/zoom-in.svg" alt="Zoom In" className="tool-icon" />
-                        </button>
-                        <button className="tool-btn" title="Zoom Out (-)" onClick={zoomOut}>
-                            <img src="/zoom-out.svg" alt="Zoom Out" className="tool-icon" />
-                        </button>
+                        <Tooltip content="Zoom In" shortcut="+" position="right">
+                            <button className="tool-btn" onClick={zoomIn} aria-label="Zoom In">
+                                <img src="/zoom-in.svg" alt="Zoom In" className="tool-icon" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip content="Zoom Out" shortcut="-" position="right">
+                            <button className="tool-btn" onClick={zoomOut} aria-label="Zoom Out">
+                                <img src="/zoom-out.svg" alt="Zoom Out" className="tool-icon" />
+                            </button>
+                        </Tooltip>
                     </div>
                 </aside>
 
                 {/* Canvas Area */}
                 <div className={`canvas-container ${baseImage ? 'has-image' : ''}`}>
+                    {/* Progress Overlays */}
+                    <ProgressIndicator
+                        visible={isGenerating}
+                        message="Generating..."
+                        subMessage={generationStages[generationStage]}
+                        stages={getProgressStages()}
+                    />
+                    <ProgressIndicator
+                        visible={isLoading}
+                        message="Loading image..."
+                        subMessage="Please wait"
+                    />
+                    <ProgressIndicator
+                        visible={isSaving}
+                        message="Saving project..."
+                    />
+                    <ProgressIndicator
+                        visible={isExporting}
+                        message="Exporting image..."
+                    />
+
                     {!baseImage ? (
                         <div className="canvas-wrapper">
                             <div className="empty-state">
@@ -468,11 +576,16 @@ function App() {
                             )}
 
                             <button
-                                className="generate-btn"
+                                className={`generate-btn ${isGenerating ? 'loading' : ''}`}
                                 disabled={!baseImage || !activeSelection || isGenerating}
                                 onClick={handleGenerate}
                             >
-                                {isGenerating ? 'Generating...' : 'Generate Fill'}
+                                {isGenerating ? (
+                                    <>
+                                        <span className="progress-spinner small" style={{ borderTopColor: 'currentColor', borderColor: 'rgba(0,0,0,0.2)' }} />
+                                        Generating...
+                                    </>
+                                ) : 'Generate Fill'}
                             </button>
 
                             {!activeSelection && baseImage && (
@@ -490,7 +603,27 @@ function App() {
             <footer className="bottom-bar">
                 <div className="bottom-bar-left">
                     <span className="status-text">
-                        {isGenerating ? 'Generating...' : isLoading ? 'Loading...' : baseImage ? 'Image loaded' : 'Ready'}
+                        {isGenerating ? (
+                            <span className="status-loading">
+                                <span className="progress-spinner" />
+                                {generationStages[generationStage]}...
+                            </span>
+                        ) : isLoading ? (
+                            <span className="status-loading">
+                                <span className="progress-spinner" />
+                                Loading...
+                            </span>
+                        ) : isSaving ? (
+                            <span className="status-loading">
+                                <span className="progress-spinner" />
+                                Saving...
+                            </span>
+                        ) : isExporting ? (
+                            <span className="status-loading">
+                                <span className="progress-spinner" />
+                                Exporting...
+                            </span>
+                        ) : baseImage ? 'Ready' : 'No image loaded'}
                     </span>
                 </div>
                 <div className="bottom-bar-center">
@@ -498,9 +631,15 @@ function App() {
                 </div>
                 <div className="bottom-bar-right">
                     <div className="zoom-controls">
-                        <button className="zoom-btn" onClick={zoomOut}>−</button>
-                        <span className="zoom-level">{Math.round(zoom)}%</span>
-                        <button className="zoom-btn" onClick={zoomIn}>+</button>
+                        <Tooltip content="Zoom Out" shortcut="-" position="top">
+                            <button className="zoom-btn" onClick={zoomOut} aria-label="Zoom Out">−</button>
+                        </Tooltip>
+                        <Tooltip content="Current zoom level" position="top">
+                            <span className="zoom-level">{Math.round(zoom)}%</span>
+                        </Tooltip>
+                        <Tooltip content="Zoom In" shortcut="+" position="top">
+                            <button className="zoom-btn" onClick={zoomIn} aria-label="Zoom In">+</button>
+                        </Tooltip>
                     </div>
                 </div>
             </footer>

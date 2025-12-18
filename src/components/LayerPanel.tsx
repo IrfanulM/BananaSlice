@@ -1,6 +1,7 @@
 // LayerPanel - Layer stack management UI
 import { useState } from 'react';
 import { useLayerStore } from '../store/layerStore';
+import { Tooltip } from './Tooltip';
 import './LayerPanel.css';
 
 interface LayerPanelProps {
@@ -77,18 +78,22 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
                         >
                             {/* Visibility toggle - only for non-base layers */}
                             {isBaseLayer(layer.type) ? (
-                                <div className="layer-visibility-placeholder">🔒</div>
+                                <Tooltip content="Background layer (locked)" position="right">
+                                    <div className="layer-visibility-placeholder">🔒</div>
+                                </Tooltip>
                             ) : (
-                                <button
-                                    className={`layer-visibility ${layer.visible ? 'visible' : 'hidden'}`}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleVisibilityToggle(layer.id);
-                                    }}
-                                    title={layer.visible ? 'Hide layer' : 'Show layer'}
-                                >
-                                    {layer.visible ? '👁' : '○'}
-                                </button>
+                                <Tooltip content={layer.visible ? 'Hide layer' : 'Show layer'} position="right">
+                                    <button
+                                        className={`layer-visibility ${layer.visible ? 'visible' : 'hidden'}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleVisibilityToggle(layer.id);
+                                        }}
+                                        aria-label={layer.visible ? 'Hide layer' : 'Show layer'}
+                                    >
+                                        {layer.visible ? '👁' : '○'}
+                                    </button>
+                                </Tooltip>
                             )}
 
                             {/* Layer thumbnail */}
@@ -139,65 +144,75 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
 
                             {/* Opacity slider - only for non-base layers */}
                             {!isBaseLayer(layer.type) && (
-                                <div className="layer-opacity">
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="100"
-                                        value={layer.opacity}
-                                        onChange={(e) => handleOpacityChange(layer.id, parseInt(e.target.value))}
-                                        onClick={(e) => e.stopPropagation()}
-                                        title={`Opacity: ${layer.opacity}%`}
-                                    />
-                                    <span className="opacity-value">{layer.opacity}%</span>
-                                </div>
+                                <Tooltip content={`Opacity: ${layer.opacity}%`} position="left">
+                                    <div className="layer-opacity">
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="100"
+                                            value={layer.opacity}
+                                            onChange={(e) => handleOpacityChange(layer.id, parseInt(e.target.value))}
+                                            onClick={(e) => e.stopPropagation()}
+                                            aria-label={`Layer opacity: ${layer.opacity}%`}
+                                        />
+                                        <span className="opacity-value">{layer.opacity}%</span>
+                                    </div>
+                                </Tooltip>
                             )}
 
                             {/* Layer actions - only for non-base layers */}
                             {!isBaseLayer(layer.type) && (
                                 <div className="layer-actions">
-                                    <button
-                                        className="layer-action"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            moveLayerUp(layer.id);
-                                        }}
-                                        disabled={layer.order === layers.length - 1}
-                                        title="Move up"
-                                    >
-                                        ↑
-                                    </button>
-                                    <button
-                                        className="layer-action"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            moveLayerDown(layer.id);
-                                        }}
-                                        disabled={layer.order === 1}
-                                        title="Move down"
-                                    >
-                                        ↓
-                                    </button>
-                                    <button
-                                        className="layer-action"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDuplicate(layer.id);
-                                        }}
-                                        title="Duplicate layer"
-                                    >
-                                        ⎘
-                                    </button>
-                                    <button
-                                        className="layer-action delete"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDelete(layer.id);
-                                        }}
-                                        title="Delete layer"
-                                    >
-                                        ×
-                                    </button>
+                                    <Tooltip content="Move up" position="top">
+                                        <button
+                                            className="layer-action"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                moveLayerUp(layer.id);
+                                            }}
+                                            disabled={layer.order === layers.length - 1}
+                                            aria-label="Move layer up"
+                                        >
+                                            ↑
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip content="Move down" position="top">
+                                        <button
+                                            className="layer-action"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                moveLayerDown(layer.id);
+                                            }}
+                                            disabled={layer.order === 1}
+                                            aria-label="Move layer down"
+                                        >
+                                            ↓
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip content="Duplicate layer" position="top">
+                                        <button
+                                            className="layer-action"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDuplicate(layer.id);
+                                            }}
+                                            aria-label="Duplicate layer"
+                                        >
+                                            ⎘
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip content="Delete layer" position="top">
+                                        <button
+                                            className="layer-action delete"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDelete(layer.id);
+                                            }}
+                                            aria-label="Delete layer"
+                                        >
+                                            ×
+                                        </button>
+                                    </Tooltip>
                                 </div>
                             )}
                         </div>

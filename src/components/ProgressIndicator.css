@@ -1,0 +1,218 @@
+/* Progress Indicator Styles */
+
+/* Spinner animation */
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Pulse animation for indeterminate progress */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.6;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Shimmer animation */
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Progress Overlay - covers the canvas area */
+.progress-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(18, 18, 18, 0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+/* Spinner */
+.progress-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border-medium);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.progress-spinner.small {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
+}
+
+.progress-spinner.medium {
+    width: 32px;
+    height: 32px;
+}
+
+/* Progress Text */
+.progress-text {
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    font-weight: var(--font-weight-medium);
+}
+
+.progress-subtext {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-top: var(--spacing-xs);
+}
+
+/* Progress Bar */
+.progress-bar-container {
+    width: 240px;
+    height: 4px;
+    background: var(--border-medium);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+    border-radius: var(--radius-pill);
+    transition: width 0.3s ease-out;
+}
+
+.progress-bar-fill.indeterminate {
+    width: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--accent-primary) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Inline Spinner (for buttons) */
+.inline-spinner {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.inline-spinner .progress-spinner {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+}
+
+/* Generate Button Loading State */
+.generate-btn.loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.generate-btn.loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.1) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Status bar loading indicator */
+.status-loading {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.status-loading .progress-spinner {
+    width: 12px;
+    height: 12px;
+    border-width: 1.5px;
+}
+
+/* Generation progress with stages */
+.progress-stages {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-sm);
+}
+
+.progress-stage {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+}
+
+.progress-stage.active {
+    color: var(--accent-primary);
+}
+
+.progress-stage.complete {
+    color: #4ade80;
+}
+
+.progress-stage-icon {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-stage-icon .progress-spinner {
+    width: 12px;
+    height: 12px;
+    border-width: 1.5px;
+}
+
+/* Panel loading overlay */
+.panel-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(37, 37, 38, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
+    z-index: 100;
+}
+
+.panel-loading-overlay .progress-text {
+    font-size: var(--font-size-sm);
+}
