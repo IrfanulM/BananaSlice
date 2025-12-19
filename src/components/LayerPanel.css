@@ -57,7 +57,10 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: background-color 0.15s ease, opacity 0.15s ease;
+    user-select: none;
+    -webkit-user-drag: element;
 }
+
 
 .layer-item:hover {
     background: var(--surface-hover);
@@ -72,6 +75,19 @@
 .layer-item.hidden-layer {
     opacity: 0.5;
 }
+
+/* Drag and Drop styles */
+.layer-item.dragging {
+    opacity: 0.4;
+    background: var(--surface-active);
+    border: 1px dashed var(--border-accent);
+}
+
+.layer-item.drag-over {
+    border-top: 2px solid var(--accent-primary);
+    padding-top: calc(var(--spacing-xs) - 2px);
+}
+
 
 /* Lock placeholder for base layer */
 .layer-visibility-placeholder {
@@ -229,9 +245,27 @@
     color: var(--text-primary);
 }
 
+.action-icon {
+    width: 12px;
+    height: 12px;
+    opacity: 0.8;
+    transition: all 0.15s ease;
+    filter: invert(60%);
+}
+
+.layer-action:hover .action-icon {
+    opacity: 1;
+    filter: invert(100%);
+}
+
+
 .layer-action:disabled {
     opacity: 0.3;
     cursor: not-allowed;
+}
+
+.layer-action.delete {
+    font-size: 14px;
 }
 
 .layer-action.delete:hover:not(:disabled) {
