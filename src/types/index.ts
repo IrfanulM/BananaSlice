@@ -1,7 +1,7 @@
 // BananaSlice - Type Definitions
 
 // Tool types
-export type Tool = 'move' | 'lasso' | 'rectangle';
+export type Tool = 'move' | 'lasso' | 'rectangle' | 'shape-rect' | 'shape-ellipse';
 
 // AI Model types
 export type AIModel = 'nano-banana-pro' | 'nano-banana';
@@ -32,7 +32,7 @@ export interface BoundingBox {
 export interface Layer {
     id: string;
     name: string;
-    type: 'base' | 'edit';
+    type: 'base' | 'edit' | 'shape';
     imageData: string; // Base64 encoded
     mask?: string; // Base64 encoded alpha mask
     visible: boolean;
@@ -47,6 +47,9 @@ export interface Layer {
     polygonPoints?: { x: number; y: number }[];
     // Blend mode
     blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay';
+    // Shape properties
+    shapeType?: 'rect' | 'ellipse';
+    fillColor?: string;
 }
 
 // Generation request for Nano Banana API

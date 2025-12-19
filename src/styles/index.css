@@ -384,6 +384,34 @@ button:focus-visible {
     filter: brightness(0) invert(1);
 }
 
+/* Color Picker Button */
+.color-picker-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    margin: 0 auto;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: 2px solid var(--border-medium);
+    transition: var(--transition);
+    position: relative;
+}
+
+.color-picker-btn:hover {
+    border-color: var(--text-primary);
+    transform: scale(1.05);
+}
+
+.color-picker-input {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
 /* Canvas Area */
 .canvas-container {
     flex: 1;

@@ -22,6 +22,7 @@ import { useRecentFilesStore } from './store/recentFilesStore';
 import { generateFill, hasApiKey } from './api';
 import { saveProject, loadProject, quickSave } from './utils/projectManager';
 import { exportImage } from './utils/exportManager';
+import { compositeLayersInBrowser } from './utils/layerCompositor';
 import { calculateAspectRatioAdjustment } from './utils/aspectRatio';
 import { getSelectionBoundsCanvas } from './utils/selectionProcessor';
 import type { ExportFormat } from './utils/exportManager';
@@ -47,13 +48,14 @@ function App() {
         cursorY
     } = useCanvasStore();
 
-    const { activeTool, setActiveTool } = useToolStore();
+    const { activeTool, setActiveTool, shapeColor, setShapeColor } = useToolStore();
 
     const { activeSelection, processForAPI, clearSelection, setActiveSelection } = useSelectionStore();
 
     const {
         setBaseLayer,
         addLayer,
+        getVisibleLayers,
     } = useLayerStore();
 
     const {
@@ -272,6 +274,12 @@ function App() {
                     case 'l':
                         setActiveTool('lasso');
                         break;
+                    case 'u':
+                        setActiveTool('shape-rect');
+                        break;
+                    case 'o':
+                        setActiveTool('shape-ellipse');
+                        break;
                     case 'd':
                         // Deselect - clear selection
                         clearSelection();
@@ -413,11 +421,25 @@ function App() {
                     throw new Error('Image transform not available. Please reload the image.');
                 }
 
-                // Stage 1: Process selection to get cropped image and mask
+                // Stage 1: Composite visible layers and process selection
                 setGenerationStage(0);
+
+                // Get all visible layers and composite them
+                const visibleLayers = getVisibleLayers();
+                let imageDataForAPI = baseImage.data;
+
+                // If there are multiple visible layers, composite them first
+                if (visibleLayers.length > 1) {
+                    imageDataForAPI = await compositeLayersInBrowser(
+                        visibleLayers,
+                        baseImage.width,
+                        baseImage.height
+                    );
+                }
+
                 const processed = await processForAPI(
-                    baseImage.data,
-                    baseImage.format,
+                    imageDataForAPI,
+                    'png', // Composite is always PNG
                     imageTransform,
                     baseImage.width,
                     baseImage.height
@@ -643,6 +665,37 @@ function App() {
                             >
                                 <img src="/lasso.svg" alt="Lasso" className="tool-icon" />
                             </button>
+                        </Tooltip>
+                    </div>
+                    <div className="tool-divider"></div>
+                    <div className="tool-group">
+                        <Tooltip content="Rectangle Shape" shortcut="U" position="right" description="Draw filled rectangles">
+                            <button
+                                className={`tool-btn ${activeTool === 'shape-rect' ? 'active' : ''}`}
+                                onClick={() => setActiveTool('shape-rect')}
+                                aria-label="Rectangle Shape"
+                            >
+                                <img src="/shape-rect.svg" alt="Rectangle Shape" className="tool-icon" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip content="Ellipse Shape" shortcut="O" position="right" description="Draw filled ellipses">
+                            <button
+                                className={`tool-btn ${activeTool === 'shape-ellipse' ? 'active' : ''}`}
+                                onClick={() => setActiveTool('shape-ellipse')}
+                                aria-label="Ellipse Shape"
+                            >
+                                <img src="/shape-ellipse.svg" alt="Ellipse Shape" className="tool-icon" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip content="Shape Color" position="right" description="Click to change shape fill color">
+                            <label className="color-picker-btn" style={{ backgroundColor: shapeColor }}>
+                                <input
+                                    type="color"
+                                    value={shapeColor}
+                                    onChange={(e) => setShapeColor(e.target.value)}
+                                    className="color-picker-input"
+                                />
+                            </label>
                         </Tooltip>
                     </div>
                     <div className="tool-divider"></div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Canvas as FabricCanvas, Image as FabricImage, Point, Rect, Polyline } from 'fabric';
+import { Canvas as FabricCanvas, Image as FabricImage, Point, Rect, Polyline, Ellipse } from 'fabric';
 import { useCanvasStore } from '../store/canvasStore';
 import { useToolStore } from '../store/toolStore';
 import { useSelectionStore } from '../store/selectionStore';
@@ -26,7 +26,7 @@ export function Canvas() {
         imageTransform
     } = useCanvasStore();
 
-    const { activeTool } = useToolStore();
+    const { activeTool, shapeColor } = useToolStore();
 
     const { setActiveSelection } = useSelectionStore();
 
@@ -34,7 +34,8 @@ export function Canvas() {
         layers,
         activeLayerId,
         setActiveLayer,
-        updateLayerTransform
+        updateLayerTransform,
+        addLayer
     } = useLayerStore();
 
     // Initialize Fabric.js canvas
@@ -131,6 +132,31 @@ export function Canvas() {
             isPanning = false;
         });
 
+        // Centralized modification handler (Move/Scale/etc)
+        canvas.on('object:modified', (e) => {
+            const obj = e.target as any;
+            if (!obj || !obj.data || !obj.data.layerId) return;
+
+            const layerId = obj.data.layerId;
+            const freshTransform = useCanvasStore.getState().imageTransform;
+            if (!freshTransform) return;
+
+            const relativeLeft = (obj.left - freshTransform.left) / freshTransform.scaleX;
+            const relativeTop = (obj.top - freshTransform.top) / freshTransform.scaleY;
+            const scaledWidth = obj.getScaledWidth();
+            const scaledHeight = obj.getScaledHeight();
+            const relativeWidth = scaledWidth / freshTransform.scaleX;
+            const relativeHeight = scaledHeight / freshTransform.scaleY;
+
+            useLayerStore.getState().updateLayerTransform(
+                layerId,
+                Math.round(relativeLeft),
+                Math.round(relativeTop),
+                Math.round(relativeWidth),
+                Math.round(relativeHeight)
+            );
+        });
+
         // Zoom with mouse wheel
         canvas.on('mouse:wheel', (opt) => {
             const evt = opt.e as WheelEvent;
@@ -207,6 +233,8 @@ export function Canvas() {
         const canvas = fabricRef.current;
 
         const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
+        const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
+        const isDrawingTool = isSelectionTool || isShapeTool;
 
         // Clear active selection when switching tools
         canvas.discardActiveObject();
@@ -219,29 +247,30 @@ export function Canvas() {
             setActiveSelection(null); // Clear from store too
         }
 
-        // Update base image object properties when tool changes
+        // Base image: only selectable in move tool
         if (baseImageObjectRef.current) {
+            const isBaseSelectable = activeTool === 'move';
             baseImageObjectRef.current.set({
-                selectable: !isSelectionTool,
-                evented: !isSelectionTool,
-                hoverCursor: isSelectionTool ? 'crosshair' : 'default',
+                selectable: isBaseSelectable,
+                evented: true, // Always evented so we can catch clicks for drawing
+                hoverCursor: isDrawingTool ? 'crosshair' : 'default',
             });
         }
 
         // Toggle interactivity for all objects based on tool
+        const isLayerSelectable = !isSelectionTool;
         canvas.getObjects().forEach((obj) => {
-            // Skip the temporary selection styling objects if any
-            if (obj === activeSelectionRef.current) return;
+            if (obj === baseImageObjectRef.current || obj === activeSelectionRef.current) return;
 
             obj.set({
-                selectable: !isSelectionTool,
+                selectable: isLayerSelectable,
                 evented: !isSelectionTool,
-                hoverCursor: isSelectionTool ? 'crosshair' : 'default',
+                hoverCursor: isSelectionTool ? 'crosshair' : (isShapeTool ? 'move' : 'default'),
             });
         });
 
-        canvas.defaultCursor = isSelectionTool ? 'crosshair' : 'default';
-        canvas.selection = !isSelectionTool; // Toggle group selection box
+        canvas.defaultCursor = isDrawingTool ? 'crosshair' : 'default';
+        canvas.selection = !isDrawingTool; // Toggle group selection box
 
         canvas.renderAll();
     }, [activeTool]);
@@ -278,7 +307,7 @@ export function Canvas() {
             const pointer = getCanvasPointer(e);
             if (!pointer) return;
 
-            // CRITICAL: Clear any existing selection before starting new one
+            // Clear any existing selection before starting new one
             clearSelection();
 
             isDrawing = true;
@@ -371,6 +400,196 @@ export function Canvas() {
         };
     }, [activeTool]);
 
+    // Handle shape drawing tools (rectangle and ellipse)
+    useEffect(() => {
+        if (!fabricRef.current || !imageTransform) return;
+        const canvas = fabricRef.current;
+
+        const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
+        if (!isShapeTool) return;
+
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+        let tempShape: Rect | Ellipse | null = null;
+
+        // Helper to get pointer coordinates in canvas object space
+        const getCanvasPointer = (e: any): { x: number; y: number } | null => {
+            if (!e.e) return null;
+            const pointer = canvas.getScenePoint(e.e);
+            return { x: pointer.x, y: pointer.y };
+        };
+
+        // Convert a shape to a layer image
+        const shapeToLayerImage = async (shape: Rect | Ellipse): Promise<string> => {
+            const width = Math.ceil(shape.width! * (shape.scaleX || 1));
+            const height = Math.ceil(shape.height! * (shape.scaleY || 1));
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const ctx = tempCanvas.getContext('2d')!;
+
+            ctx.fillStyle = shapeColor;
+
+            if (shape instanceof Ellipse) {
+                ctx.beginPath();
+                ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            const dataUrl = tempCanvas.toDataURL('image/png');
+            return dataUrl.split(',')[1]; // Return base64 without prefix
+        };
+
+        const handleMouseDown = (e: any) => {
+            const pointer = getCanvasPointer(e);
+            if (!pointer) return;
+
+            // If we clicked on an existing object (like another shape), don't start drawing a new one
+            // We allow drawing if the target is the background image though
+            if (e.target && e.target !== baseImageObjectRef.current) {
+                // If the target is a layer object, make sure it's the active one for moving
+                if (e.target.data?.layerId) {
+                    setActiveLayer(e.target.data.layerId);
+                }
+                return;
+            }
+
+            isDrawing = true;
+            startX = pointer.x;
+            startY = pointer.y;
+        };
+
+        const handleMouseMove = (e: any) => {
+            if (!isDrawing) return;
+
+            const pointer = getCanvasPointer(e);
+            if (!pointer) return;
+
+            // Remove temporary preview
+            if (tempShape) {
+                canvas.remove(tempShape);
+            }
+
+            const width = Math.abs(pointer.x - startX);
+            const height = Math.abs(pointer.y - startY);
+            const left = Math.min(startX, pointer.x);
+            const top = Math.min(startY, pointer.y);
+
+            if (activeTool === 'shape-ellipse') {
+                tempShape = new Ellipse({
+                    left: left + width / 2,
+                    top: top + height / 2,
+                    rx: width / 2,
+                    ry: height / 2,
+                    fill: shapeColor,
+                    stroke: '#000',
+                    strokeWidth: 1,
+                    originX: 'center',
+                    originY: 'center',
+                    selectable: false,
+                    evented: false,
+                });
+            } else {
+                tempShape = new Rect({
+                    left,
+                    top,
+                    width,
+                    height,
+                    fill: shapeColor,
+                    stroke: '#000',
+                    strokeWidth: 1,
+                    selectable: false,
+                    evented: false,
+                });
+            }
+
+            canvas.add(tempShape);
+            canvas.renderAll();
+        };
+
+        const handleMouseUp = async () => {
+            if (!isDrawing || !tempShape) {
+                isDrawing = false;
+                return;
+            }
+
+            isDrawing = false;
+
+            // Get shape bounds before removing
+            const shapeWidth = tempShape.width! * (tempShape.scaleX || 1);
+            const shapeHeight = tempShape.height! * (tempShape.scaleY || 1);
+
+            // Skip tiny shapes (accidental clicks)
+            if (shapeWidth < 5 || shapeHeight < 5) {
+                canvas.remove(tempShape);
+                tempShape = null;
+                return;
+            }
+
+            let shapeLeft: number;
+            let shapeTop: number;
+
+            if (tempShape instanceof Ellipse) {
+                // Ellipse uses center origin
+                shapeLeft = tempShape.left! - shapeWidth / 2;
+                shapeTop = tempShape.top! - shapeHeight / 2;
+            } else {
+                shapeLeft = tempShape.left!;
+                shapeTop = tempShape.top!;
+            }
+
+            // Convert shape to layer image
+            const imageData = await shapeToLayerImage(tempShape);
+
+            // Calculate position relative to base image
+            const relativeX = (shapeLeft - imageTransform.left) / imageTransform.scaleX;
+            const relativeY = (shapeTop - imageTransform.top) / imageTransform.scaleY;
+            const relativeWidth = shapeWidth / imageTransform.scaleX;
+            const relativeHeight = shapeHeight / imageTransform.scaleY;
+
+            // Remove temporary shape from canvas
+            canvas.remove(tempShape);
+            tempShape = null;
+
+            // Add as a new layer
+            const shapeType = activeTool === 'shape-ellipse' ? 'Ellipse' : 'Rectangle';
+            addLayer({
+                name: shapeType,
+                type: 'shape',
+                imageData,
+                visible: true,
+                opacity: 100,
+                x: Math.round(relativeX),
+                y: Math.round(relativeY),
+                width: Math.round(relativeWidth),
+                height: Math.round(relativeHeight),
+                shapeType: activeTool === 'shape-ellipse' ? 'ellipse' : 'rect',
+                fillColor: shapeColor,
+            });
+
+            canvas.renderAll();
+        };
+
+        canvas.on('mouse:down', handleMouseDown);
+        canvas.on('mouse:move', handleMouseMove);
+        canvas.on('mouse:up', handleMouseUp);
+
+        return () => {
+            canvas.off('mouse:down', handleMouseDown);
+            canvas.off('mouse:move', handleMouseMove);
+            canvas.off('mouse:up', handleMouseUp);
+
+            // Clean up any temporary shape
+            if (tempShape) {
+                canvas.remove(tempShape);
+            }
+        };
+    }, [activeTool, shapeColor, imageTransform, addLayer]);
+
     // Load image when baseImage changes
     useEffect(() => {
         if (!fabricRef.current || !baseImage) return;
@@ -410,12 +629,14 @@ export function Canvas() {
                 const centerY = (canvas.height! - scaledHeight) / 2;
 
                 const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
+                const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
+                const isDrawingTool = isSelectionTool || isShapeTool;
 
                 img.set({
                     left: centerX,
                     top: centerY,
-                    selectable: !isSelectionTool,
-                    evented: !isSelectionTool,
+                    selectable: activeTool === 'move',
+                    evented: true,
                     lockMovementX: true,
                     lockMovementY: true,
                     lockRotation: true,
@@ -425,7 +646,7 @@ export function Canvas() {
                     hasBorders: true,
                     borderColor: '#FFD700',
                     borderScaleFactor: 2,
-                    hoverCursor: isSelectionTool ? 'crosshair' : 'default',
+                    hoverCursor: isDrawingTool ? 'crosshair' : 'default',
                     moveCursor: 'default',
                 });
 
@@ -491,6 +712,7 @@ export function Canvas() {
         const processAllLayers = async () => {
             try {
                 const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
+                const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
 
                 // Check if base image has actually loaded (ref-based check is synchronous)
                 if (!baseImageObjectRef.current) {
@@ -565,13 +787,16 @@ export function Canvas() {
                         opacity: layer.opacity / 100,
                         selectable: !isSelectionTool,
                         evented: !isSelectionTool,
-                        hoverCursor: isSelectionTool ? 'crosshair' : 'default',
+                        hoverCursor: isSelectionTool ? 'crosshair' : (isShapeTool ? 'move' : 'default'),
                         borderColor: '#FFD700',
                         cornerColor: '#FFD700',
                         cornerStyle: 'circle',
                         transparentCorners: false,
                         borderScaleFactor: 2,
                     });
+
+                    // Attach layer ID for sync
+                    (obj as any).data = { layerId: layer.id };
 
                     obj.setCoords();
 
@@ -604,7 +829,7 @@ export function Canvas() {
                     }
                 }
 
-                // CLEANUP: Remove any untracked objects (duplicates, orphans)
+                // Remove any untracked objects (duplicates, orphans)
                 const allCanvasObjects = canvas.getObjects();
                 for (const obj of allCanvasObjects) {
                     const isBase = obj === baseImageObjectRef.current;
@@ -696,26 +921,8 @@ export function Canvas() {
         canvas.on('selection:updated', handleSelection);
         canvas.on('selection:cleared', handleSelectionCleared);
 
-        // Attach modified event listeners for layers
+        // Sync events for layers
         for (const [layerId, obj] of currentObjects.entries()) {
-            obj.off('modified');
-            obj.on('modified', () => {
-                const relativeLeft = (obj.left! - imageTransform.left) / imageTransform.scaleX;
-                const relativeTop = (obj.top! - imageTransform.top) / imageTransform.scaleY;
-                const scaledWidth = obj.width! * obj.scaleX!;
-                const scaledHeight = obj.height! * obj.scaleY!;
-                const relativeWidth = scaledWidth / imageTransform.scaleX;
-                const relativeHeight = scaledHeight / imageTransform.scaleY;
-
-                updateLayerTransform(
-                    layerId,
-                    Math.round(relativeLeft),
-                    Math.round(relativeTop),
-                    Math.round(relativeWidth),
-                    Math.round(relativeHeight)
-                );
-            });
-
             // Update polygon outline during move/scale (real-time)
             const updatePolygonOutline = () => {
                 if (!polygonOutlineRef.current) return;

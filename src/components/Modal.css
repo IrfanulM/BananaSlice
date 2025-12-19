@@ -198,7 +198,6 @@
 
 .modal-keys {
     display: flex;
-    gap: var(--spacing-xs);
 }
 
 .modal-key {
