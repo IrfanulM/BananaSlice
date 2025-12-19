@@ -240,8 +240,21 @@
     text-decoration: none;
 }
 
-.settings-description a:hover {
+.settings-description a:hover,
+.link-btn:hover {
     text-decoration: underline;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: var(--accent-primary);
+    text-decoration: none;
+    cursor: pointer;
+    display: inline;
 }
 
 .api-key-status {

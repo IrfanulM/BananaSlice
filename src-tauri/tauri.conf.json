@@ -39,6 +39,7 @@
   },
   "plugins": {
     "fs": {},
+    "shell": {},
     "window": {
       "all": true
     }

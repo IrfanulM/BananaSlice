@@ -1,87 +1,79 @@
-// Secure API Key Storage
-// Uses file-based storage in app data directory
+// Secure API Key Storage using OS Native Keychain
+// Uses the 'keyring' crate to interface with:
+// - Windows Credential Manager
+// - macOS Keychain
+// - Linux libsecret/KWallet
 
-use std::fs;
-use std::path::PathBuf;
+use keyring::Entry;
 use thiserror::Error;
 
-const APP_NAME: &str = "bananaslice";
-const KEY_FILENAME: &str = "api_key.txt";
+const SERVICE_NAME: &str = "BananaSlice-API";
+const USER_ACCOUNT: &str = "Gemini-Key";
 
 #[derive(Error, Debug)]
 pub enum KeyringError {
-    #[error("Failed to access storage: {0}")]
-    AccessError(String),
-    
+    #[error("Failed to access system keychain: {0}")]
+    KeychainError(String),
+
     #[error("API key not found")]
     KeyNotFound,
 }
 
-/// Get the app data directory
-fn get_app_data_dir() -> Result<PathBuf, KeyringError> {
-    let base_dirs = directories::BaseDirs::new()
-        .ok_or_else(|| KeyringError::AccessError("Could not find app data directory".to_string()))?;
-    
-    let app_data = base_dirs.data_local_dir().join(APP_NAME);
-    
-    // Create directory if it doesn't exist
-    if !app_data.exists() {
-        fs::create_dir_all(&app_data)
-            .map_err(|e| KeyringError::AccessError(format!("Could not create app data dir: {}", e)))?;
-    }
-    
-    Ok(app_data)
+// Helper to get the keyring entry
+fn get_entry() -> Result<Entry, KeyringError> {
+    Entry::new(SERVICE_NAME, USER_ACCOUNT)
+        .map_err(|e| KeyringError::KeychainError(format!("Failed to create keyring entry: {}", e)))
 }
 
-/// Get the path to the API key file
-fn get_key_path() -> Result<PathBuf, KeyringError> {
-    Ok(get_app_data_dir()?.join(KEY_FILENAME))
-}
-
-/// Store the API key
+// Store the API key in the system keychain
 pub fn store_api_key(api_key: &str) -> Result<(), KeyringError> {
-    let key_path = get_key_path()?;
-    
-    fs::write(&key_path, api_key)
-        .map_err(|e| KeyringError::AccessError(format!("Could not write API key: {}", e)))?;
-    
-    log::info!("API key saved to {:?}", key_path);
+    let entry = get_entry()?;
+    entry
+        .set_password(api_key)
+        .map_err(|e| KeyringError::KeychainError(format!("Failed to set password: {}", e)))?;
+
+    log::info!("API key securely saved to system keychain");
+
+    // Immediate verification for debugging
+    match entry.get_password() {
+        Ok(_) => log::info!("API key persistence verified"),
+        Err(e) => log::error!("API key saved but verification failed: {}", e),
+    }
+
     Ok(())
 }
 
-/// Retrieve the API key
+// Retrieve the API key from the system keychain
 pub fn get_api_key() -> Result<String, KeyringError> {
-    let key_path = get_key_path()?;
-    
-    if !key_path.exists() {
-        return Err(KeyringError::KeyNotFound);
+    let entry = get_entry()?;
+
+    match entry.get_password() {
+        Ok(key) => {
+            let key = key.trim().to_string();
+            if key.is_empty() {
+                Err(KeyringError::KeyNotFound)
+            } else {
+                Ok(key)
+            }
+        }
+        Err(e) => {
+            log::debug!("Keychain check: {}", e);
+            Err(KeyringError::KeyNotFound)
+        }
     }
-    
-    let key = fs::read_to_string(&key_path)
-        .map_err(|e| KeyringError::AccessError(format!("Could not read API key: {}", e)))?;
-    
-    let key = key.trim().to_string();
-    
-    if key.is_empty() {
-        return Err(KeyringError::KeyNotFound);
-    }
-    
-    Ok(key)
 }
 
-/// Delete the API key
+// Delete the API key from the system keychain
 pub fn delete_api_key() -> Result<(), KeyringError> {
-    let key_path = get_key_path()?;
+    let entry = get_entry()?;
     
-    if key_path.exists() {
-        fs::remove_file(&key_path)
-            .map_err(|e| KeyringError::AccessError(format!("Could not delete API key: {}", e)))?;
-    }
+    // We ignore error on delete if key wasn't there
+    let _ = entry.delete_credential();
     
     Ok(())
 }
 
-/// Check if an API key is stored
+// Check if an API key exists
 pub fn has_api_key() -> bool {
     get_api_key().is_ok()
 }

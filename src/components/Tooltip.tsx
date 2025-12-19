@@ -11,17 +11,19 @@ interface TooltipProps {
     /** The element that triggers the tooltip */
     children: ReactNode;
     /** Main tooltip text */
-    content: string;
+    content: string | ReactNode;
     /** Optional keyboard shortcut to display */
     shortcut?: string;
     /** Optional description for more details */
-    description?: string;
+    description?: string | ReactNode;
     /** Position of the tooltip relative to the trigger */
     position?: TooltipPosition;
     /** Delay before showing tooltip (ms) */
     delay?: number;
     /** Whether tooltip is disabled */
     disabled?: boolean;
+    /** Whether the user can interact with the tooltip content (hover over it) */
+    interactive?: boolean;
 }
 
 export function Tooltip({
@@ -32,6 +34,7 @@ export function Tooltip({
     position = 'top',
     delay = 400,
     disabled = false,
+    interactive = false,
 }: TooltipProps) {
     const [visible, setVisible] = useState(false);
     const [coords, setCoords] = useState({ top: 0, left: 0 });
@@ -80,7 +83,21 @@ export function Tooltip({
             clearTimeout(timeoutRef.current);
             timeoutRef.current = null;
         }
-        setVisible(false);
+
+        if (interactive) {
+            timeoutRef.current = window.setTimeout(() => {
+                setVisible(false);
+            }, 3000);
+        } else {
+            setVisible(false);
+        }
+    };
+
+    const cancelHide = () => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
     };
 
     useEffect(() => {
@@ -103,18 +120,24 @@ export function Tooltip({
                 width: 0,
                 height: 0,
                 overflow: 'visible',
-                zIndex: 10000,
+                zIndex: 10001,
                 pointerEvents: 'none',
             }}
         >
             <div
                 ref={tooltipRef}
-                className={`tooltip ${position} ${visible ? 'visible' : ''} ${hasMultipleLines ? 'multiline' : ''}`}
+                className={`tooltip ${position} ${visible ? 'visible' : ''} ${hasMultipleLines ? 'multiline' : ''} ${interactive ? 'interactive' : ''}`}
                 role="tooltip"
+                style={{
+                    pointerEvents: (interactive && visible) ? 'auto' : 'none',
+                    zIndex: 10002
+                }}
+                onMouseEnter={interactive ? cancelHide : undefined}
+                onMouseLeave={interactive ? hideTooltip : undefined}
             >
                 <span className="tooltip-title">{content}</span>
                 {shortcut && <span className="tooltip-shortcut">{shortcut}</span>}
-                {description && <span className="tooltip-description">{description}</span>}
+                {description && <div className="tooltip-description">{description}</div>}
             </div>
         </div>
     );

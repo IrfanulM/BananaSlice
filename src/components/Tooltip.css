@@ -24,6 +24,10 @@
     transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
+.tooltip.interactive.visible {
+    pointer-events: auto;
+}
+
 .tooltip.visible {
     opacity: 1;
     transform: translateY(0);

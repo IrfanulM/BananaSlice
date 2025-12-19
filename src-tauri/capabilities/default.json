@@ -15,6 +15,13 @@
     "fs:allow-read-text-file",
     "core:window:allow-set-title",
     {
+      "identifier": "shell:allow-open",
+      "allow": [
+        "https://aistudio.google.com/app/apikey",
+        "https://github.com/IrfanulM/BananaSlice/blob/main/src-tauri/src/keystore.rs"
+      ]
+    },
+    {
       "identifier": "fs:scope",
       "allow": [
         {

@@ -1,4 +1,4 @@
-<img src="public/logo_cropped.png" width="64" alt="BananaSlice Logo">
+### <img src="public/logo_cropped.png" width="64" alt="BananaSlice Logo">
 
 # BananaSlice
 Open-Source Generative Fill Image Editing Application using Nano Banana & Nano Banana Pro

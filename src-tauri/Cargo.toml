@@ -25,6 +25,8 @@ tauri = { version = "2.9.4", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+keyring = { version = "3", features = ["windows-native"] }
 
 # Image processing
 image = "0.25"
@@ -33,9 +35,6 @@ base64 = "0.22"
 # HTTP client for API requests
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 tokio = { version = "1", features = ["full"] }
-
-# File/directory utilities
-directories = "5"
 
 # Error handling
 thiserror = "2"

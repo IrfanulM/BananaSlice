@@ -1,6 +1,8 @@
 // Settings Modal Component
 import { useState, useEffect } from 'react';
 import { setApiKey, hasApiKey, deleteApiKey } from '../api';
+import { Tooltip } from './Tooltip';
+import { open } from '@tauri-apps/plugin-shell';
 import './Modal.css';
 
 interface SettingsModalProps {
@@ -53,6 +55,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         }
     };
 
+    const handleOpenExternal = async (url: string) => {
+        try {
+            await open(url);
+        } catch (error) {
+            console.error('Failed to open external URL:', error);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -68,9 +78,37 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <h3>Gemini API Key</h3>
                         <p className="settings-description">
                             Get your API key from{' '}
-                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">
+                            <button
+                                className="link-btn"
+                                onClick={() => handleOpenExternal('https://aistudio.google.com/app/apikey')}
+                            >
                                 Google AI Studio
-                            </a>
+                            </button>.
+                            <br />
+                            <Tooltip
+                                content="How is this stored?"
+                                delay={200}
+                                position="bottom"
+                                interactive={true}
+                                description={
+                                    <>
+                                        BananaSlice uses your OS Native Keychain (e.g., macOS Keychain or Windows Credential Manager).
+                                        Your key is encrypted via your system login.
+                                        You can verify our open-source implementation{' '}
+                                        <button
+                                            className="link-btn"
+                                            onClick={() => handleOpenExternal('https://github.com/IrfanulM/BananaSlice/blob/main/src-tauri/src/keystore.rs')}
+                                            style={{ color: 'var(--primary)', textDecoration: 'underline' }}
+                                        >
+                                            here
+                                        </button>.
+                                    </>
+                                }
+                            >
+                                <span style={{ cursor: 'help', borderBottom: '1px dotted currentColor', fontSize: '0.9em', opacity: 0.8 }}>
+                                    Is my key safe?
+                                </span>
+                            </Tooltip>
                         </p>
 
                         <div className="api-key-status">
