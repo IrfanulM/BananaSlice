@@ -596,7 +596,7 @@ export function Canvas() {
 
         const canvas = fabricRef.current;
 
-        // Clear canvas and cached objects synchronously BEFORE loading new image
+        // Clear canvas and cached objects synchronously
         canvas.remove(...canvas.getObjects());
         editLayerObjectsRef.current.clear();
         baseImageObjectRef.current = null;

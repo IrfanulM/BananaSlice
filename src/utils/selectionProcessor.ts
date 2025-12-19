@@ -46,16 +46,21 @@ export function transformToImageSpace(
     imageWidth: number,
     imageHeight: number
 ): SelectionBounds {
-    const x = Math.floor((canvasBounds.x - imageTransform.left) / imageTransform.scaleX);
-    const y = Math.floor((canvasBounds.y - imageTransform.top) / imageTransform.scaleY);
-    const width = Math.ceil(canvasBounds.width / imageTransform.scaleX);
-    const height = Math.ceil(canvasBounds.height / imageTransform.scaleY);
+    const imageX1 = Math.floor((canvasBounds.x - imageTransform.left) / imageTransform.scaleX);
+    const imageY1 = Math.floor((canvasBounds.y - imageTransform.top) / imageTransform.scaleY);
+    const imageX2 = Math.ceil((canvasBounds.x + canvasBounds.width - imageTransform.left) / imageTransform.scaleX);
+    const imageY2 = Math.ceil((canvasBounds.y + canvasBounds.height - imageTransform.top) / imageTransform.scaleY);
+
+    const clampedX1 = Math.max(0, Math.min(imageX1, imageWidth - 1));
+    const clampedY1 = Math.max(0, Math.min(imageY1, imageHeight - 1));
+    const clampedX2 = Math.max(0, Math.min(imageX2, imageWidth));
+    const clampedY2 = Math.max(0, Math.min(imageY2, imageHeight));
 
     return {
-        x: Math.max(0, Math.min(x, imageWidth - 1)),
-        y: Math.max(0, Math.min(y, imageHeight - 1)),
-        width: Math.min(width, imageWidth - x),
-        height: Math.min(height, imageHeight - y),
+        x: clampedX1,
+        y: clampedY1,
+        width: Math.max(0, clampedX2 - clampedX1),
+        height: Math.max(0, clampedY2 - clampedY1),
     };
 }
 

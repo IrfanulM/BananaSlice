@@ -361,7 +361,6 @@ function App() {
                         onConfirm: () => {
                             setAspectRatioDialog(null);
 
-                            // Actually resize the selection to the adjusted dimensions
                             // Get current selection properties
                             const currentWidth = activeSelection.width * (activeSelection.scaleX || 1);
                             const currentHeight = activeSelection.height * (activeSelection.scaleY || 1);
