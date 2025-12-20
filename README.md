@@ -6,6 +6,8 @@ Open-Source alternative to Adobe Photoshop's Generative Fill using Nano Banana &
 [![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-yellow.svg)](https://github.com/IrfanulM/BananaSlice/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
+![Demo](https://raw.githubusercontent.com/IrfanulM/BananaSlice/main/demo.gif)
+
 ## Features
 
 - **AI-Powered Generative Fill**: Fill selections using Google Gemini's Nano Banana and Nano Banana Pro models
@@ -16,22 +18,21 @@ Open-Source alternative to Adobe Photoshop's Generative Fill using Nano Banana &
 - **Secure API Storage**: API keys encrypted via OS native keychain
 - **Cross-Platform**: Available for Windows, macOS, and Linux
 
-## Tech Stack
-
-- **Frontend**: React 19 + TypeScript
-- **Canvas Engine**: Fabric.js 6
-- **State Management**: Zustand
-- **Desktop Wrapper**: Tauri 2 (Rust)
-- **Styling**: CSS (Modern CSS3)
-- **Testing**: Vitest + JSDOM
-
 ## Getting Started
 
-### Prerequisites
+### Download
+
+Grab the latest release for your platform from the [Releases page](https://github.com/IrfanulM/BananaSlice/releases).
+
+### Build from Source
+
+If you'd prefer to build the app yourself:
+
+**Prerequisites:**
 - [Node.js](https://nodejs.org/) (v18+)
 - [Rust](https://www.rust-lang.org/) (for Tauri builds)
 
-### Installation
+**Steps:**
 1. Clone the repository:
    ```bash
    git clone https://github.com/IrfanulM/BananaSlice.git
@@ -44,6 +45,15 @@ Open-Source alternative to Adobe Photoshop's Generative Fill using Nano Banana &
    ```bash
    npm run tauri dev
    ```
+
+## Tech Stack
+
+- **Frontend**: React 19 + TypeScript
+- **Canvas Engine**: Fabric.js 6
+- **State Management**: Zustand
+- **Desktop Wrapper**: Tauri 2 (Rust)
+- **Styling**: CSS (Modern CSS3)
+- **Testing**: Vitest + JSDOM
 
 ## License
 

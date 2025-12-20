@@ -49,7 +49,24 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "BananaSlice v__VERSION__"
-          releaseBody: "See the assets below to download and install this version."
+          releaseBody: |
+            ## Download Instructions
+            
+            Choose the right file for your operating system:
+            
+            ### Windows
+            - **`.exe`** - Recommended for most users (standard installer)
+            - **`.msi`** - Alternative installer for enterprise/IT deployment
+            
+            ### macOS
+            - **`.dmg`** - Recommended (drag to Applications folder)
+            
+            > **First Launch:** macOS will block the app since it's not signed. Try to open the app, then go to **System Settings → Privacy & Security**, scroll down and click **"Open Anyway"** next to the blocked app message.
+            
+            ### Linux
+            - **`.deb`** - For Debian, Ubuntu, and derivatives
+            - **`.rpm`** - For Fedora, RHEL, CentOS, and derivatives
+            - **`.AppImage`** - Universal, runs on any distro (no install needed)
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
