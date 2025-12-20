@@ -1,0 +1,85 @@
+/* Context Toolbar */
+.context-toolbar-portal {
+    position: fixed;
+    width: 0;
+    height: 0;
+    overflow: visible;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.context-toolbar {
+    position: absolute;
+    transform: translateX(-50%);
+    background: var(--bg-panel);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-popup);
+    padding: var(--spacing-xs) var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    pointer-events: auto;
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+    white-space: nowrap;
+}
+
+.context-toolbar.visible {
+    opacity: 1;
+}
+
+.context-toolbar-label {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: var(--font-weight-medium);
+}
+
+.context-toolbar-slider-group {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.context-toolbar-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100px;
+    height: 4px;
+    background: var(--border-medium);
+    border-radius: var(--radius-pill);
+    outline: none;
+}
+
+.context-toolbar-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: var(--text-secondary);
+    border-radius: 50%;
+    border: 2px solid var(--bg-panel);
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.context-toolbar-slider::-webkit-slider-thumb:hover {
+    background: var(--text-primary);
+    transform: scale(1.1);
+}
+
+.context-toolbar-slider:active::-webkit-slider-thumb {
+    background: var(--accent-primary);
+}
+
+.context-toolbar-value {
+    font-size: var(--font-size-xs);
+    color: var(--text-primary);
+    min-width: 32px;
+    text-align: right;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+}

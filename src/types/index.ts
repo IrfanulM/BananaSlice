@@ -45,6 +45,10 @@ export interface Layer {
     height?: number;
     // Polygon points for lasso selections (relative to layer x,y)
     polygonPoints?: { x: number; y: number }[];
+    // Edge feathering radius in pixels
+    featherRadius?: number;
+    // Original unmasked image for dynamic feathering
+    originalImageData?: string;
     // Blend mode
     blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay';
     // Shape properties

@@ -475,11 +475,12 @@ function App() {
                     );
                 }
 
-                // Add the generated patch as a new layer
+                // Add generated patch as a new layer
                 addLayer({
                     name: `Edit: ${prompt.substring(0, 20)}${prompt.length > 20 ? '...' : ''}`,
                     type: 'edit',
                     imageData: finalImageBase64,
+                    originalImageData: genResult.image_base64,
                     visible: true,
                     opacity: 100,
                     x: processed.bounds.x,

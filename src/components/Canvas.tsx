@@ -4,17 +4,25 @@ import { useCanvasStore } from '../store/canvasStore';
 import { useToolStore } from '../store/toolStore';
 import { useSelectionStore } from '../store/selectionStore';
 import { useLayerStore } from '../store/layerStore';
+import { ContextToolbar } from './ContextToolbar';
+import { applyLayerFeathering, applySharpPolygonMask } from '../utils/layerCompositor';
 
 export function Canvas() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const fabricRef = useRef<FabricCanvas | null>(null);
     const activeSelectionRef = useRef<any>(null); // Track the current selection
     const editLayerObjectsRef = useRef<Map<string, FabricImage>>(new Map()); // Track edit layer objects
+    const layerFeatherCacheRef = useRef<Map<string, number>>(new Map()); // Track featherRadius for each layer
     const polygonOutlineRef = useRef<Polyline | null>(null); // Track polygon outline for active layer
     const baseImageObjectRef = useRef<FabricImage | null>(null);
-    const isProcessingLayersRef = useRef(false); // Prevent concurrent processing
     const processingVersionRef = useRef(0); // Version counter for aborting stale processing
     const [baseImageReady, setBaseImageReady] = useState(false);
+    const [selectedLayerBounds, setSelectedLayerBounds] = useState<{
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+    } | null>(null);
 
     const {
         baseImage,
@@ -561,6 +569,7 @@ export function Canvas() {
                 name: shapeType,
                 type: 'shape',
                 imageData,
+                originalImageData: imageData,
                 visible: true,
                 opacity: 100,
                 x: Math.round(relativeX),
@@ -599,8 +608,8 @@ export function Canvas() {
         // Clear canvas and cached objects synchronously
         canvas.remove(...canvas.getObjects());
         editLayerObjectsRef.current.clear();
+        layerFeatherCacheRef.current.clear();
         baseImageObjectRef.current = null;
-        isProcessingLayersRef.current = false; // Reset processing flag
         processingVersionRef.current++; // Increment version to abort any stale processing
         setBaseImageReady(false);
 
@@ -679,13 +688,8 @@ export function Canvas() {
             return;
         }
 
-        // Prevent concurrent processing
-        if (isProcessingLayersRef.current) {
-            return;
-        }
-        isProcessingLayersRef.current = true;
-
-        // Capture current version to detect if we should abort
+        // Increment version to abort any in-progress processing
+        processingVersionRef.current++;
         const currentVersion = processingVersionRef.current;
 
         const currentObjects = editLayerObjectsRef.current;
@@ -710,181 +714,216 @@ export function Canvas() {
 
         // Process each non-base layer
         const processAllLayers = async () => {
-            try {
-                const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
-                const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
+            const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
+            const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
 
-                // Check if base image has actually loaded (ref-based check is synchronous)
-                if (!baseImageObjectRef.current) {
-                    return;
+            // Check if base image has actually loaded (ref-based check is synchronous)
+            if (!baseImageObjectRef.current) {
+                return;
+            }
+
+            // Get fresh transform from store to avoid stale closure values
+            const freshTransform = useCanvasStore.getState().imageTransform;
+            if (!freshTransform) {
+                return;
+            }
+            const scale = freshTransform.scaleX;
+
+            for (const layer of layers) {
+                // Check if we should abort (version changed)
+                if (processingVersionRef.current !== currentVersion) {
+                    return; // Abort this processing run
                 }
 
-                // Get fresh transform from store to avoid stale closure values
-                const freshTransform = useCanvasStore.getState().imageTransform;
-                if (!freshTransform) {
-                    return;
-                }
-                const scale = freshTransform.scaleX;
+                // Skip base layer - visibility already handled above
+                if (layer.type === 'base') continue;
 
-                for (const layer of layers) {
-                    // Check if we should abort (version changed)
-                    if (processingVersionRef.current !== currentVersion) {
-                        return; // Abort this processing run
+                let obj = currentObjects.get(layer.id);
+                const cachedFeather = layerFeatherCacheRef.current.get(layer.id);
+                const currentFeather = layer.featherRadius ?? 0;
+                const featherChanged = cachedFeather !== undefined && cachedFeather !== currentFeather;
+
+                // Create new fabric object if needed or if featherRadius changed
+                if (!obj || featherChanged) {
+                    // Determine what image data to use
+                    let imageData = layer.imageData;
+
+                    // Apply feathering if layer has original data and needs processing
+                    const needsFeatherApply = layer.originalImageData &&
+                        (featherChanged || cachedFeather === undefined);
+
+                    if (needsFeatherApply) {
+                        if (currentFeather > 0) {
+                            // Apply feathering to the original unmasked image
+                            const featheredImage = await applyLayerFeathering(layer);
+                            if (featheredImage) {
+                                imageData = featheredImage;
+                            }
+                        } else {
+                            // No feather: apply sharp mask for polygons, use original for rectangles
+                            if (layer.polygonPoints && layer.polygonPoints.length >= 3) {
+                                const sharpImage = await applySharpPolygonMask(layer);
+                                if (sharpImage) {
+                                    imageData = sharpImage;
+                                }
+                            } else {
+                                // Rectangle: use original image directly (no mask needed)
+                                if (layer.originalImageData) {
+                                    imageData = layer.originalImageData;
+                                }
+                            }
+                        }
                     }
 
-                    // Skip base layer - visibility already handled above
-                    if (layer.type === 'base') continue;
+                    // Create data URL from the (possibly feathered) image
+                    const dataUrl = imageData.startsWith('data:')
+                        ? imageData
+                        : `data:image/png;base64,${imageData}`;
 
-                    let obj = currentObjects.get(layer.id);
+                    try {
+                        const img = await FabricImage.fromURL(dataUrl);
 
-                    // Create new fabric object if needed
-                    if (!obj) {
-                        // Gemini returns base64 encoded images (might be PNG or JPEG)
-                        const dataUrl = layer.imageData.startsWith('data:')
-                            ? layer.imageData
-                            : `data:image/png;base64,${layer.imageData}`;
-
-                        try {
-                            const img = await FabricImage.fromURL(dataUrl);
-
-                            if (!img.width || !img.height || img.width <= 0 || img.height <= 0) {
-                                console.error('Layer image has invalid dimensions:', layer.id, img.width, img.height);
-                                continue;
-                            }
-
-                            obj = img;
-                            currentObjects.set(layer.id, obj);
-                            canvas.add(obj);
-                        } catch (err) {
-                            console.error('Failed to load layer image:', layer.id, err);
+                        if (!img.width || !img.height || img.width <= 0 || img.height <= 0) {
+                            console.error('Layer image has invalid dimensions:', layer.id, img.width, img.height);
                             continue;
                         }
-                    }
 
-                    if (!obj) continue;
+                        // If updating existing object, remove old one first
+                        if (obj) {
+                            canvas.remove(obj);
+                        }
 
-                    // Calculate position and scale
-                    const targetLeft = freshTransform.left + ((layer.x || 0) * scale);
-                    const targetTop = freshTransform.top + ((layer.y || 0) * scale);
-
-                    // Calculate target dimensions on canvas
-                    const targetCanvasWidth = (layer.width || obj.width || 100) * scale;
-                    const targetCanvasHeight = (layer.height || obj.height || 100) * scale;
-
-                    // Calculate scale factor to fit the image to target dimensions
-                    const imgWidth = obj.width || 1;
-                    const imgHeight = obj.height || 1;
-                    const targetScaleX = targetCanvasWidth / imgWidth;
-                    const targetScaleY = targetCanvasHeight / imgHeight;
-
-                    // Apply ALL properties
-                    obj.set({
-                        left: targetLeft,
-                        top: targetTop,
-                        scaleX: targetScaleX,
-                        scaleY: targetScaleY,
-                        visible: layer.visible,
-                        opacity: layer.opacity / 100,
-                        selectable: !isSelectionTool,
-                        evented: !isSelectionTool,
-                        hoverCursor: isSelectionTool ? 'crosshair' : (isShapeTool ? 'move' : 'default'),
-                        borderColor: '#FFD700',
-                        cornerColor: '#FFD700',
-                        cornerStyle: 'circle',
-                        transparentCorners: false,
-                        borderScaleFactor: 2,
-                    });
-
-                    // Attach layer ID for sync
-                    (obj as any).data = { layerId: layer.id };
-
-                    obj.setCoords();
-
-                    // Update active state
-                    if (layer.id === activeLayerId && canvas.getActiveObject() !== obj) {
-                        canvas.setActiveObject(obj);
+                        obj = img;
+                        currentObjects.set(layer.id, obj);
+                        layerFeatherCacheRef.current.set(layer.id, currentFeather);
+                        canvas.add(obj);
+                    } catch (err) {
+                        console.error('Failed to load layer image:', layer.id, err);
+                        continue;
                     }
                 }
 
-                // Enforce Z-Index order to match store (Bottom -> Top)
-                layers.forEach((layer, index) => {
-                    const obj = layer.type === 'base'
-                        ? baseImageObjectRef.current
-                        : currentObjects.get(layer.id);
+                if (!obj) continue;
 
-                    if (obj) {
-                        const currentIndex = canvas.getObjects().indexOf(obj);
-                        if (currentIndex !== index) {
-                            canvas.moveObjectTo(obj, index);
-                        }
-                    }
+                // Calculate position and scale
+                const targetLeft = freshTransform.left + ((layer.x || 0) * scale);
+                const targetTop = freshTransform.top + ((layer.y || 0) * scale);
+
+                // Calculate target dimensions on canvas
+                const targetCanvasWidth = (layer.width || obj.width || 100) * scale;
+                const targetCanvasHeight = (layer.height || obj.height || 100) * scale;
+
+                // Calculate scale factor to fit the image to target dimensions
+                const imgWidth = obj.width || 1;
+                const imgHeight = obj.height || 1;
+                const targetScaleX = targetCanvasWidth / imgWidth;
+                const targetScaleY = targetCanvasHeight / imgHeight;
+
+                // Apply ALL properties
+                obj.set({
+                    left: targetLeft,
+                    top: targetTop,
+                    scaleX: targetScaleX,
+                    scaleY: targetScaleY,
+                    visible: layer.visible,
+                    opacity: layer.opacity / 100,
+                    selectable: !isSelectionTool,
+                    evented: !isSelectionTool,
+                    hoverCursor: isSelectionTool ? 'crosshair' : (isShapeTool ? 'move' : 'default'),
+                    borderColor: '#FFD700',
+                    cornerColor: '#FFD700',
+                    cornerStyle: 'circle',
+                    transparentCorners: false,
+                    borderScaleFactor: 2,
                 });
 
-                // Remove objects for deleted layers
-                const layerIds = new Set(layers.map(l => l.id));
-                for (const [id, obj] of currentObjects.entries()) {
-                    if (!layerIds.has(id)) {
-                        canvas.remove(obj);
-                        currentObjects.delete(id);
-                    }
+                // Attach layer ID for sync
+                (obj as any).data = { layerId: layer.id };
+
+                obj.setCoords();
+
+                // Update active state
+                if (layer.id === activeLayerId && canvas.getActiveObject() !== obj) {
+                    canvas.setActiveObject(obj);
                 }
-
-                // Remove any untracked objects (duplicates, orphans)
-                const allCanvasObjects = canvas.getObjects();
-                for (const obj of allCanvasObjects) {
-                    const isBase = obj === baseImageObjectRef.current;
-                    const isSelection = obj === activeSelectionRef.current;
-                    const isPolygonOutline = obj === polygonOutlineRef.current;
-                    let isTrackedLayer = false;
-                    for (const layerObj of currentObjects.values()) {
-                        if (layerObj === obj) {
-                            isTrackedLayer = true;
-                            break;
-                        }
-                    }
-
-                    // Remove if not base, not selection, not polygon outline, and not a tracked layer
-                    if (!isBase && !isSelection && !isPolygonOutline && !isTrackedLayer) {
-                        canvas.remove(obj);
-                    }
-                }
-
-                // Draw polygon outline for active layer if it has polygon points
-                if (polygonOutlineRef.current) {
-                    canvas.remove(polygonOutlineRef.current);
-                    polygonOutlineRef.current = null;
-                }
-
-                const activeLayer = layers.find(l => l.id === activeLayerId);
-                if (activeLayer && activeLayer.polygonPoints && activeLayer.polygonPoints.length >= 3) {
-                    const layerObj = currentObjects.get(activeLayer.id);
-                    if (layerObj) {
-                        // Transform polygon points to canvas coordinates
-                        const canvasPoints = activeLayer.polygonPoints.map(pt => {
-                            // Points are relative to layer bounds, so add layer position and apply scale
-                            const x = layerObj.left! + (pt.x * layerObj.scaleX!);
-                            const y = layerObj.top! + (pt.y * layerObj.scaleY!);
-                            return new Point(x, y);
-                        });
-
-                        // Create polygon outline
-                        polygonOutlineRef.current = new Polyline(canvasPoints, {
-                            fill: '',
-                            stroke: '#FFD700',
-                            strokeWidth: 1,
-                            strokeDashArray: [3, 3],
-                            selectable: false,
-                            evented: false,
-                        });
-
-                        canvas.add(polygonOutlineRef.current);
-                    }
-                }
-
-                canvas.requestRenderAll();
-            } finally {
-                isProcessingLayersRef.current = false;
             }
+
+            // Enforce Z-Index order to match store (Bottom -> Top)
+            layers.forEach((layer, index) => {
+                const obj = layer.type === 'base'
+                    ? baseImageObjectRef.current
+                    : currentObjects.get(layer.id);
+
+                if (obj) {
+                    const currentIndex = canvas.getObjects().indexOf(obj);
+                    if (currentIndex !== index) {
+                        canvas.moveObjectTo(obj, index);
+                    }
+                }
+            });
+
+            // Remove objects for deleted layers
+            const layerIds = new Set(layers.map(l => l.id));
+            for (const [id, obj] of currentObjects.entries()) {
+                if (!layerIds.has(id)) {
+                    canvas.remove(obj);
+                    currentObjects.delete(id);
+                }
+            }
+
+            // Remove any untracked objects (duplicates, orphans)
+            const allCanvasObjects = canvas.getObjects();
+            for (const obj of allCanvasObjects) {
+                const isBase = obj === baseImageObjectRef.current;
+                const isSelection = obj === activeSelectionRef.current;
+                const isPolygonOutline = obj === polygonOutlineRef.current;
+                let isTrackedLayer = false;
+                for (const layerObj of currentObjects.values()) {
+                    if (layerObj === obj) {
+                        isTrackedLayer = true;
+                        break;
+                    }
+                }
+
+                // Remove if not base, not selection, not polygon outline, and not a tracked layer
+                if (!isBase && !isSelection && !isPolygonOutline && !isTrackedLayer) {
+                    canvas.remove(obj);
+                }
+            }
+
+            // Draw polygon outline for active layer if it has polygon points
+            if (polygonOutlineRef.current) {
+                canvas.remove(polygonOutlineRef.current);
+                polygonOutlineRef.current = null;
+            }
+
+            const activeLayer = layers.find(l => l.id === activeLayerId);
+            if (activeLayer && activeLayer.polygonPoints && activeLayer.polygonPoints.length >= 3) {
+                const layerObj = currentObjects.get(activeLayer.id);
+                if (layerObj) {
+                    // Transform polygon points to canvas coordinates
+                    const canvasPoints = activeLayer.polygonPoints.map(pt => {
+                        // Points are relative to layer bounds, so add layer position and apply scale
+                        const x = layerObj.left! + (pt.x * layerObj.scaleX!);
+                        const y = layerObj.top! + (pt.y * layerObj.scaleY!);
+                        return new Point(x, y);
+                    });
+
+                    // Create polygon outline
+                    polygonOutlineRef.current = new Polyline(canvasPoints, {
+                        fill: '',
+                        stroke: '#FFD700',
+                        strokeWidth: 1,
+                        strokeDashArray: [3, 3],
+                        selectable: false,
+                        evented: false,
+                    });
+
+                    canvas.add(polygonOutlineRef.current);
+                }
+            }
+
+            canvas.requestRenderAll();
         };
 
         processAllLayers();
@@ -957,6 +996,50 @@ export function Canvas() {
         fabricRef.current.requestRenderAll();
     }, [zoom]);
 
+    // Update selected layer bounds for context toolbar positioning
+    useEffect(() => {
+        const canvas = fabricRef.current;
+        if (!canvas || !activeLayerId) {
+            setSelectedLayerBounds(null);
+            return;
+        }
+
+        const updateBounds = () => {
+            // Find the fabric object for the active layer
+            const layerObj = editLayerObjectsRef.current.get(activeLayerId);
+            if (!layerObj) {
+                setSelectedLayerBounds(null);
+                return;
+            }
+
+            // Get bounding rect in screen coordinates
+            const boundingRect = layerObj.getBoundingRect();
+            const canvasEl = canvas.getElement();
+            const canvasRect = canvasEl.getBoundingClientRect();
+
+            setSelectedLayerBounds({
+                left: canvasRect.left + boundingRect.left,
+                top: canvasRect.top + boundingRect.top,
+                width: boundingRect.width,
+                height: boundingRect.height,
+            });
+        };
+
+        // Update immediately
+        updateBounds();
+
+        // Update on object changes
+        canvas.on('object:moving', updateBounds);
+        canvas.on('object:scaling', updateBounds);
+        canvas.on('after:render', updateBounds);
+
+        return () => {
+            canvas.off('object:moving', updateBounds);
+            canvas.off('object:scaling', updateBounds);
+            canvas.off('after:render', updateBounds);
+        };
+    }, [activeLayerId, layers, zoom]);
+
     return (
         <div
             className="canvas-wrapper"
@@ -967,6 +1050,10 @@ export function Canvas() {
             }}
         >
             <canvas ref={canvasRef} />
+            <ContextToolbar
+                layerBounds={selectedLayerBounds}
+                layerId={activeLayerId}
+            />
         </div>
     );
 }

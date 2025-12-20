@@ -31,6 +31,9 @@ interface LayerState {
     duplicateLayer: (id: string) => string | null;
     updateLayerTransform: (id: string, x: number, y: number, width: number, height: number) => void;
 
+    // Feathering
+    setFeatherRadius: (id: string, radius: number) => void;
+
     // Utility
     getLayer: (id: string) => Layer | undefined;
     getVisibleLayers: () => Layer[];
@@ -56,10 +59,14 @@ export const useLayerStore = create<LayerState>((set, get) => ({
         const { layers } = get();
         const order = layers.length;
 
+        // Set default feather radius: 8px for lasso layers (with polygonPoints), 0 for others
+        const defaultFeather = layerData.polygonPoints && layerData.polygonPoints.length >= 3 ? 8 : 0;
+
         const newLayer: Layer = {
             ...layerData,
             id,
             order,
+            featherRadius: layerData.featherRadius ?? defaultFeather,
         };
 
         set((state) => ({
@@ -186,6 +193,14 @@ export const useLayerStore = create<LayerState>((set, get) => ({
         set((state) => ({
             layers: state.layers.map((l) =>
                 l.id === id ? { ...l, x, y, width, height } : l
+            ),
+        }));
+    },
+
+    setFeatherRadius: (id, radius) => {
+        set((state) => ({
+            layers: state.layers.map((l) =>
+                l.id === id ? { ...l, featherRadius: Math.max(0, Math.min(50, radius)) } : l
             ),
         }));
     },
