@@ -116,7 +116,7 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
                                                 {/* Visibility toggle */}
                                                 {isBaseLayer(layer.type) ? (
                                                     <Tooltip content="Background layer (locked)" position="right">
-                                                        <div className="layer-visibility-placeholder">🔒</div>
+                                                        <div className="layer-visibility-placeholder"><img src="/lock.svg" alt="Locked" className="visibility-icon" /></div>
                                                     </Tooltip>
                                                 ) : (
                                                     <Tooltip content={layer.visible ? 'Hide layer' : 'Show layer'} position="right">
@@ -127,7 +127,7 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
                                                                 handleVisibilityToggle(layer.id);
                                                             }}
                                                         >
-                                                            {layer.visible ? '👁' : '○'}
+                                                            <img src={layer.visible ? '/eye_visible.svg' : '/eye_invisible.svg'} alt={layer.visible ? 'Visible' : 'Hidden'} className="visibility-icon" />
                                                         </button>
                                                     </Tooltip>
                                                 )}

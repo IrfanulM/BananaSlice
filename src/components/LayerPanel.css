@@ -124,6 +124,24 @@
     opacity: 0.5;
 }
 
+/* Visibility icons */
+.visibility-icon {
+    width: 14px;
+    height: 14px;
+    opacity: 0.8;
+    filter: invert(60%);
+    transition: all 0.15s ease;
+}
+
+.layer-visibility:hover .visibility-icon {
+    opacity: 1;
+    filter: invert(100%);
+}
+
+.layer-visibility-placeholder .visibility-icon {
+    opacity: 0.6;
+}
+
 /* Thumbnail */
 .layer-thumbnail {
     width: 32px;
