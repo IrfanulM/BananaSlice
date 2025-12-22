@@ -1,6 +1,6 @@
 [package]
 name = "BananaSlice"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Generative Fill Desktop App"
 authors = ["Irfanul Majumder"]
 license = "MIT"
