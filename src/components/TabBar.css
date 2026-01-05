@@ -1,0 +1,119 @@
+/* Tab Bar Styles */
+
+.tab-bar {
+    display: flex;
+    align-items: center;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+    height: 36px;
+    padding: 0 var(--spacing-xs);
+    gap: var(--spacing-xs);
+    user-select: none;
+}
+
+.tab-list {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.tab-list::-webkit-scrollbar {
+    display: none;
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    padding-right: var(--spacing-xs);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    max-width: 200px;
+    min-width: 100px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    position: relative;
+}
+
+.tab:hover {
+    background: var(--surface-hover);
+}
+
+.tab.active {
+    background: var(--bg-primary);
+    border-color: var(--border-subtle);
+}
+
+.tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--bg-primary);
+}
+
+.tab-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+}
+
+.tab.active .tab-name {
+    color: var(--text-primary);
+}
+
+.tab-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-disabled);
+    font-size: var(--font-size-md);
+    line-height: 1;
+    opacity: 0;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.tab:hover .tab-close {
+    opacity: 1;
+}
+
+.tab-close:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+
+.tab-new {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--font-size-lg);
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.tab-new:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}

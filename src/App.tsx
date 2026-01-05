@@ -11,6 +11,7 @@ import { ToastContainer } from './components/Toast';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { ReferenceImages } from './components/ReferenceImages';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { TabBar } from './components/TabBar';
 import { toast } from './store/toastStore';
 import { useCanvasStore } from './store/canvasStore';
 import { useToolStore } from './store/toolStore';
@@ -19,8 +20,9 @@ import { useLayerStore } from './store/layerStore';
 import { useHistoryStore } from './store/historyStore';
 import { useSettingsStore } from './store/settingsStore';
 import { useRecentFilesStore } from './store/recentFilesStore';
+import { useProjectsStore } from './store/projectsStore';
 import { generateFill, hasApiKey } from './api';
-import { saveProject, loadProject, loadProjectFromPath, quickSave } from './utils/projectManager';
+import { saveProject, loadProjectFromPath, quickSave } from './utils/projectManager';
 import { exportImage } from './utils/exportManager';
 import { compositeLayersInBrowser } from './utils/layerCompositor';
 import { calculateAspectRatioAdjustment } from './utils/aspectRatio';
@@ -89,6 +91,16 @@ function App() {
     } | null>(null);
     const [closeConfirmDialog, setCloseConfirmDialog] = useState(false);
 
+    // Projects store for multi-tab management
+    const { 
+        createProject, 
+        updateProjectName, 
+        activeProjectId, 
+        tabOrder, 
+        saveCurrentProjectState,
+        switchProject
+    } = useProjectsStore();
+
     // Recent files
     const { recentFiles, addRecentFile } = useRecentFilesStore();
 
@@ -109,6 +121,10 @@ function App() {
             label,
             status: index < generationStage ? 'complete' : index === generationStage ? 'active' : 'pending',
         }));
+    };
+
+    const findOpenProject = (filePath: string): string | null => {
+        return useProjectsStore.getState().findProjectByPath(filePath);
     };
 
     useEffect(() => {
@@ -145,9 +161,21 @@ function App() {
         const appWindow = getCurrentWindow();
 
         const unlisten = appWindow.onCloseRequested((event: CloseRequestedEvent) => {
-            const hasUnsavedChanges = useHistoryStore.getState().isDirty;
+            // Save current project state first
+            saveCurrentProjectState();
+            
+            // Check if any project has unsaved changes
+            const projectsState = useProjectsStore.getState();
+            let anyUnsaved = false;
+            
+            for (const [id] of projectsState.projects) {
+                if (projectsState.hasUnsavedChanges(id)) {
+                    anyUnsaved = true;
+                    break;
+                }
+            }
 
-            if (hasUnsavedChanges) {
+            if (anyUnsaved) {
                 event.preventDefault();
                 setCloseConfirmDialog(true);
             }
@@ -238,21 +266,75 @@ function App() {
                 }
             }
 
-            // Standard drop handling
+            if (isGenerating) {
+                toast.warning('Cannot open files while generating');
+                return;
+            }
+
             if (extension === 'banslice') {
+                const projectsState = useProjectsStore.getState();
+                const existingId = projectsState.findProjectByPath(filePath);
+                if (existingId) {
+                    projectsState.switchProject(existingId);
+                    toast.info('Project is already open');
+                    return;
+                }
+                
+                const needsNewTab = projectsState.tabOrder.length === 0 || baseImage;
+                const previousActiveId = projectsState.activeProjectId;
+
+                if (needsNewTab) {
+                    projectsState.createProject();
+                }
+                
                 loadProjectFromPath(filePath).then(result => {
                     if (result.success) {
                         toast.success('Project loaded');
-                        if (result.path) addRecentFile(result.path, 'project');
-                    } else if (result.error) {
-                        toast.error(`Failed to load project: ${result.error}`);
+                        if (result.path) {
+                            addRecentFile(result.path, 'project');
+                            const fileName = result.path.split(/[/\\]/).pop()?.replace('.banslice', '') || 'Untitled';
+                            const currentId = useProjectsStore.getState().activeProjectId;
+                            if (currentId) {
+                                useProjectsStore.getState().updateProjectName(currentId, fileName);
+                            }
+                        }
+                    } else {
+                        if (needsNewTab && previousActiveId) {
+                            useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
+                        }
+                        if (result.error) {
+                            toast.error(`Failed to load project: ${result.error}`);
+                        }
                     }
                 });
             } else if (supportedImageExtensions.includes(extension)) {
+                const projectsState = useProjectsStore.getState();
+                const existingId = projectsState.findProjectByPath(filePath);
+                if (existingId) {
+                    projectsState.switchProject(existingId);
+                    toast.info('Image is already open');
+                    return;
+                }
+                
+                const needsNewTab = projectsState.tabOrder.length === 0 || baseImage;
+                const previousActiveId = projectsState.activeProjectId;
+
+                if (needsNewTab) {
+                    projectsState.createProject();
+                }
+                
                 loadImage(filePath).then(() => {
                     addRecentFile(filePath, 'image');
                     toast.success('Image loaded');
+                    const fileName = filePath.split(/[/\\]/).pop() || 'Untitled';
+                    const currentId = useProjectsStore.getState().activeProjectId;
+                    if (currentId) {
+                        useProjectsStore.getState().updateProjectName(currentId, fileName);
+                    }
                 }).catch(err => {
+                    if (needsNewTab && previousActiveId) {
+                        useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
+                    }
                     toast.error(`Failed to load image: ${err.message || 'Unknown error'}`);
                 });
             } else {
@@ -263,7 +345,7 @@ function App() {
         return () => {
             unlisten.then(fn => fn());
         };
-    }, [loadImage, addRecentFile, referenceImages, setReferenceImages]);
+    }, [loadImage, addRecentFile, referenceImages, setReferenceImages, baseImage]);
 
     // Initialize base layer when a NEW image is loaded (skip for project files)
     useEffect(() => {
@@ -323,15 +405,55 @@ function App() {
 
     const handleLoadProject = async () => {
         setFileMenuOpen(false);
+        
+        if (isGenerating) {
+            toast.warning('Cannot open files while generating');
+            return;
+        }
+        
         try {
-            const result = await loadProject();
+            const filePath = await open({
+                filters: [{
+                    name: 'BananaSlice Project',
+                    extensions: ['banslice']
+                }],
+                multiple: false,
+            });
+
+            if (!filePath || typeof filePath !== 'string') {
+                return;
+            }
+
+            const existingProjectId = findOpenProject(filePath);
+            if (existingProjectId) {
+                switchProject(existingProjectId);
+                toast.info('Project is already open');
+                return;
+            }
+
+            const needsNewTab = tabOrder.length === 0 || baseImage;
+            const previousActiveId = activeProjectId;
+            
+            if (needsNewTab) {
+                createProject();
+            }
+
+            const result = await loadProjectFromPath(filePath);
             if (result.success) {
                 toast.success('Project loaded successfully');
-                if (result.path) {
-                    addRecentFile(result.path, 'project');
+                addRecentFile(filePath, 'project');
+                const fileName = filePath.split(/[/\\]/).pop()?.replace('.banslice', '') || 'Untitled';
+                const currentProjectId = useProjectsStore.getState().activeProjectId;
+                if (currentProjectId) {
+                    updateProjectName(currentProjectId, fileName);
                 }
-            } else if (result.error) {
-                toast.error(`Failed to load project: ${result.error}`);
+            } else {
+                if (needsNewTab && previousActiveId) {
+                    useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
+                }
+                if (result.error) {
+                    toast.error(`Failed to load project: ${result.error}`);
+                }
             }
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Unknown error';
@@ -429,7 +551,13 @@ function App() {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isProject, baseImage, setActiveTool, clearSelection, zoomIn, zoomOut]);
 
+
     const handleOpenImage = async () => {
+        if (isGenerating) {
+            toast.warning('Cannot open files while generating');
+            return;
+        }
+
         try {
             const selected = await open({
                 multiple: false,
@@ -440,11 +568,40 @@ function App() {
             });
 
             if (selected && typeof selected === 'string') {
-                await loadImage(selected);
-                addRecentFile(selected, 'image');
+                const existingProjectId = findOpenProject(selected);
+                if (existingProjectId) {
+                    switchProject(existingProjectId);
+                    toast.info('Image is already open');
+                    return;
+                }
+
+                const needsNewTab = tabOrder.length === 0 || baseImage;
+                const previousActiveId = activeProjectId;
+                
+                if (needsNewTab) {
+                    createProject();
+                }
+                
+                try {
+                    await loadImage(selected);
+                    addRecentFile(selected, 'image');
+                    
+                    const fileName = selected.split(/[/\\]/).pop() || 'Untitled';
+                    const currentProjectId = useProjectsStore.getState().activeProjectId;
+                    if (currentProjectId) {
+                        updateProjectName(currentProjectId, fileName);
+                    }
+                } catch (loadError) {
+                    if (needsNewTab && previousActiveId) {
+                        useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
+                    }
+                    throw loadError;
+                }
             }
         } catch (error) {
             console.error('Failed to open image:', error);
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            toast.error(`Failed to load image: ${message}`);
         }
     };
 
@@ -705,10 +862,51 @@ function App() {
                                                     key={file.path}
                                                     onClick={async () => {
                                                         setFileMenuOpen(false);
-                                                        if (file.type === 'project') {
-                                                            await loadProject();
-                                                        } else {
-                                                            await loadImage(file.path);
+                                                        
+                                                        if (isGenerating) {
+                                                            toast.warning('Cannot open files while generating');
+                                                            return;
+                                                        }
+
+                                                        const existingId = findOpenProject(file.path);
+                                                        if (existingId) {
+                                                            switchProject(existingId);
+                                                            toast.info('File is already open');
+                                                            return;
+                                                        }
+                                                        
+                                                        const needsNewTab = tabOrder.length === 0 || baseImage;
+                                                        const previousActiveId = activeProjectId;
+
+                                                        if (needsNewTab) {
+                                                            createProject();
+                                                        }
+                                                        
+                                                        try {
+                                                            if (file.type === 'project') {
+                                                                const result = await loadProjectFromPath(file.path);
+                                                                if (result.success) {
+                                                                    const fileName = file.path.split(/[/\\]/).pop()?.replace('.banslice', '') || 'Untitled';
+                                                                    updateProjectName(useProjectsStore.getState().activeProjectId!, fileName);
+                                                                } else {
+                                                                    if (needsNewTab && previousActiveId) {
+                                                                        useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
+                                                                    }
+                                                                    if (result.error) {
+                                                                        toast.error(`Failed to load project: ${result.error}`);
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                await loadImage(file.path);
+                                                                const fileName = file.path.split(/[/\\]/).pop() || 'Untitled';
+                                                                updateProjectName(useProjectsStore.getState().activeProjectId!, fileName);
+                                                            }
+                                                        } catch (err) {
+                                                            if (needsNewTab && previousActiveId) {
+                                                                useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
+                                                            }
+                                                            const message = err instanceof Error ? err.message : 'Unknown error';
+                                                            toast.error(`Failed to load file: ${message}`);
                                                         }
                                                     }}
                                                     title={file.path}
@@ -773,9 +971,12 @@ function App() {
                         >
                             ↪
                         </button>
-                    </Tooltip>
+                </Tooltip>
                 </div>
             </header>
+
+            {/* Project Tabs */}
+            <TabBar isGenerating={isGenerating} />
 
             {/* Main Content Area */}
             <main className="main-content">

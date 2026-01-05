@@ -6,7 +6,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import type { Layer } from '../types';
 import { useLayerStore } from './layerStore';
 
-interface HistorySnapshot {
+export interface HistorySnapshot {
     layers: Layer[];
     activeLayerId: string | null;
     timestamp: number;
@@ -25,6 +25,7 @@ interface HistoryState {
     isDirty: boolean;
     markSaved: () => void;
     reset: () => void;
+    restoreState: (past: HistorySnapshot[], future: HistorySnapshot[], isDirty: boolean) => void;
 
     _recordState: (layers: Layer[], activeLayerId: string | null) => void;
     _setTimeTraveling: (value: boolean) => void;
@@ -165,6 +166,14 @@ export const useHistoryStore = create<HistoryState>()(
                 debounceTimer = null;
             }
             set({ past: [], future: [], isTimeTraveling: false, isDirty: false });
+        },
+
+        restoreState: (past, future, isDirty) => {
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+                debounceTimer = null;
+            }
+            set({ past, future, isDirty, isTimeTraveling: false });
         },
     }))
 );
