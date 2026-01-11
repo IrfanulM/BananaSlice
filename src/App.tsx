@@ -1,18 +1,22 @@
+// BananaSlice - Main Application Component
+// Refactored to use custom hooks for better separation of concerns
+
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
-import { getCurrentWindow, type CloseRequestedEvent } from '@tauri-apps/api/window';
+
+// Components
 import { Canvas } from './components/Canvas';
 import { SettingsModal } from './components/SettingsModal';
 import { LayerPanel } from './components/LayerPanel';
-import { ProgressIndicator, type ProgressStage } from './components/ProgressIndicator';
+import { ProgressIndicator } from './components/ProgressIndicator';
 import { Tooltip } from './components/Tooltip';
 import { ToastContainer } from './components/Toast';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { ReferenceImages } from './components/ReferenceImages';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { TabBar } from './components/TabBar';
-import { toast } from './store/toastStore';
+
+// Stores
 import { useCanvasStore } from './store/canvasStore';
 import { useToolStore } from './store/toolStore';
 import { useSelectionStore } from './store/selectionStore';
@@ -20,16 +24,22 @@ import { useLayerStore } from './store/layerStore';
 import { useHistoryStore } from './store/historyStore';
 import { useSettingsStore } from './store/settingsStore';
 import { useRecentFilesStore } from './store/recentFilesStore';
-import { useProjectsStore } from './store/projectsStore';
-import { generateFill, hasApiKey } from './api';
-import { saveProject, loadProjectFromPath, quickSave } from './utils/projectManager';
-import { exportImage } from './utils/exportManager';
-import { compositeLayersInBrowser } from './utils/layerCompositor';
-import { calculateAspectRatioAdjustment } from './utils/aspectRatio';
-import { getSelectionBoundsCanvas } from './utils/selectionProcessor';
-import type { ExportFormat } from './utils/exportManager';
+
+// Custom Hooks
+import {
+    useFileOperations,
+    useGeneration,
+    useKeyboardShortcuts,
+    useDragDrop,
+    useWindowManagement,
+} from './hooks';
+
+// Types and Styles
 import type { AIModel } from './types';
 import './styles/index.css';
+
+// Declare version constant from Vite define
+declare const __APP_VERSION__: string;
 
 interface AppInfo {
     name: string;
@@ -37,321 +47,77 @@ interface AppInfo {
 }
 
 function App() {
-    const {
-        baseImage,
-        imagePath,
-        isLoading,
-        loadImage,
-        imageTransform,
-        zoom,
-        zoomIn,
-        zoomOut,
-        cursorX,
-        cursorY
-    } = useCanvasStore();
-
-    const { activeTool, setActiveTool, shapeColor, setShapeColor } = useToolStore();
-
-    const { activeSelection, processForAPI, clearSelection, setActiveSelection } = useSelectionStore();
-
-    const {
-        setBaseLayer,
-        addLayer,
-        getVisibleLayers,
-    } = useLayerStore();
-
-    const {
-        undo: handleUndo,
-        redo: handleRedo,
-        canUndo,
-        canRedo,
-        reset: resetHistory,
-    } = useHistoryStore();
-
     // UI State
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [fileMenuOpen, setFileMenuOpen] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
-    const fileMenuRef = useRef<HTMLDivElement>(null);
     const [prompt, setPrompt] = useState('');
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [generationStage, setGenerationStage] = useState(0);
-    const [error, setError] = useState<string | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isExporting, setIsExporting] = useState(false);
     const [referenceImages, setReferenceImages] = useState<string[]>([]);
-    const [dragHoverSlot, setDragHoverSlot] = useState<number | null>(null);
-    const [aspectRatioDialog, setAspectRatioDialog] = useState<{
-        open: boolean;
-        originalRatio: string;
-        adjustedRatio: string;
-        widthDiff: number;
-        heightDiff: number;
-        onConfirm: () => void;
-    } | null>(null);
-    const [closeConfirmDialog, setCloseConfirmDialog] = useState(false);
+    const fileMenuRef = useRef<HTMLDivElement>(null);
 
-    // Projects store for multi-tab management
-    const { 
-        createProject, 
-        updateProjectName, 
-        activeProjectId, 
-        tabOrder, 
-        saveCurrentProjectState,
-        switchProject
-    } = useProjectsStore();
+    // Store hooks
+    const { baseImage, imagePath, isLoading, zoom, zoomIn, zoomOut, cursorX, cursorY } = useCanvasStore();
+    const { activeTool, setActiveTool, shapeColor, setShapeColor } = useToolStore();
+    const { activeSelection } = useSelectionStore();
+    const { setBaseLayer } = useLayerStore();
+    const { undo: handleUndo, redo: handleRedo, canUndo, canRedo, reset: resetHistory } = useHistoryStore();
+    const { setDefaultModel: setModel } = useSettingsStore();
+    const { recentFiles } = useRecentFilesStore();
 
-    // Recent files
-    const { recentFiles, addRecentFile } = useRecentFilesStore();
+    // Custom hooks
+    const {
+        isGenerating,
+        generationStage,
+        generationStages,
+        error,
+        aspectRatioDialog,
+        model,
+        handleGenerate,
+        setAspectRatioDialog,
+        getProgressStages,
+    } = useGeneration({
+        prompt,
+        referenceImages,
+        onOpenSettings: () => setSettingsOpen(true),
+    });
 
-    // Model preference from persistent settings store
-    const { defaultModel: model, setDefaultModel: setModel } = useSettingsStore();
+    const {
+        isSaving,
+        isExporting,
+        isProject,
+        handleQuickSave,
+        handleSaveProject,
+        handleLoadProject,
+        handleOpenImage,
+        handleExport,
+        handleOpenRecentFile,
+    } = useFileOperations({ isGenerating });
 
-    // Generation stage labels
-    const generationStages = [
-        'Processing selection',
-        'Generating with AI',
-        'Applying result',
-    ];
+    const { closeConfirmDialog, handleConfirmClose, handleCancelClose } = useWindowManagement();
 
-    // Create progress stages based on current stage
-    const getProgressStages = (): ProgressStage[] => {
-        return generationStages.map((label, index) => ({
-            id: `stage-${index}`,
-            label,
-            status: index < generationStage ? 'complete' : index === generationStage ? 'active' : 'pending',
-        }));
-    };
+    const { dragHoverSlot } = useDragDrop({
+        isGenerating,
+        referenceImages,
+        setReferenceImages,
+    });
 
-    const findOpenProject = (filePath: string): string | null => {
-        return useProjectsStore.getState().findProjectByPath(filePath);
-    };
+    // Keyboard shortcuts hook
+    useKeyboardShortcuts({
+        isProject,
+        hasImage: !!baseImage,
+        onQuickSave: handleQuickSave,
+        onSaveProject: handleSaveProject,
+    });
 
+    // Fetch app info on mount
     useEffect(() => {
         invoke<AppInfo>('get_app_info').catch(console.error);
     }, []);
-
-    // Check for unsaved changes (from history store)
-    const isDirty = useHistoryStore(state => state.isDirty);
-
-    // Update window title dynamically (with asterisk for unsaved changes)
-    useEffect(() => {
-        const setWindowTitle = async () => {
-            const window = getCurrentWindow();
-            const unsavedMarker = isDirty ? '*' : '';
-
-            if (!baseImage) {
-                // Nothing open
-                await window.setTitle('BananaSlice');
-            } else if (imagePath?.endsWith('.banslice')) {
-                // Project file is open - extract project name from path
-                const fileName = imagePath.split(/[\\\\/]/).pop() || 'Untitled Project';
-                const projectName = fileName.replace('.banslice', '');
-                await window.setTitle(`${unsavedMarker}${projectName} | BananaSlice`);
-            } else {
-                // Raw image is open
-                await window.setTitle(`${unsavedMarker}Untitled Project | BananaSlice`);
-            }
-        };
-
-        setWindowTitle().catch(console.error);
-    }, [baseImage, imagePath, isDirty]);
-
-    useEffect(() => {
-        const appWindow = getCurrentWindow();
-
-        const unlisten = appWindow.onCloseRequested((event: CloseRequestedEvent) => {
-            // Save current project state first
-            saveCurrentProjectState();
-            
-            // Check if any project has unsaved changes
-            const projectsState = useProjectsStore.getState();
-            let anyUnsaved = false;
-            
-            for (const [id] of projectsState.projects) {
-                if (projectsState.hasUnsavedChanges(id)) {
-                    anyUnsaved = true;
-                    break;
-                }
-            }
-
-            if (anyUnsaved) {
-                event.preventDefault();
-                setCloseConfirmDialog(true);
-            }
-        });
-
-        return () => {
-            unlisten.then(fn => fn());
-        };
-    }, []);
-
-    // Handle file drag and drop
-    useEffect(() => {
-        const appWindow = getCurrentWindow();
-        const supportedImageExtensions = ['png', 'jpg', 'jpeg', 'webp'];
-
-        const findReferenceSlot = (x: number, y: number): number | null => {
-            const element = document.elementFromPoint(x, y);
-            if (!element) return null;
-
-            const slot = element.closest('[data-reference-slot]');
-            if (slot) {
-                const index = slot.getAttribute('data-reference-slot');
-                return index !== null ? parseInt(index, 10) : null;
-            }
-            return null;
-        };
-
-        const loadImageAsBase64 = async (filePath: string): Promise<string | null> => {
-            try {
-                const { readFile } = await import('@tauri-apps/plugin-fs');
-                const bytes = await readFile(filePath);
-                const base64 = btoa(
-                    Array.from(bytes)
-                        .map(byte => String.fromCharCode(byte))
-                        .join('')
-                );
-                return base64;
-            } catch (err) {
-                console.error('Failed to read image file:', err);
-                return null;
-            }
-        };
-
-        const unlisten = appWindow.onDragDropEvent(async (event) => {
-            const eventType = event.payload.type;
-
-            // Handle hover events to show visual feedback
-            if (eventType === 'over') {
-                const pos = event.payload.position;
-                const slotIndex = findReferenceSlot(pos.x, pos.y);
-                setDragHoverSlot(slotIndex);
-                return;
-            }
-
-            // Clear hover state on leave
-            if (eventType === 'leave') {
-                setDragHoverSlot(null);
-                return;
-            }
-
-            if (eventType !== 'drop') return;
-
-            // Clear hover state on drop
-            setDragHoverSlot(null);
-
-            const paths = event.payload.paths;
-            if (!paths || paths.length === 0) return;
-
-            const filePath = paths[0];
-            const extension = filePath.split('.').pop()?.toLowerCase() || '';
-            const dropPosition = event.payload.position;
-
-            // Check if dropping on a reference image slot
-            if (supportedImageExtensions.includes(extension) && dropPosition) {
-                const slotIndex = findReferenceSlot(dropPosition.x, dropPosition.y);
-                if (slotIndex !== null) {
-                    const base64 = await loadImageAsBase64(filePath);
-                    if (base64) {
-                        const newImages = [...referenceImages];
-                        while (newImages.length < 3) {
-                            newImages.push('');
-                        }
-                        newImages[slotIndex] = base64;
-                        setReferenceImages(newImages);
-                        toast.success('Reference image added');
-                    }
-                    return;
-                }
-            }
-
-            if (isGenerating) {
-                toast.warning('Cannot open files while generating');
-                return;
-            }
-
-            if (extension === 'banslice') {
-                const projectsState = useProjectsStore.getState();
-                const existingId = projectsState.findProjectByPath(filePath);
-                if (existingId) {
-                    projectsState.switchProject(existingId);
-                    toast.info('Project is already open');
-                    return;
-                }
-                
-                const needsNewTab = projectsState.tabOrder.length === 0 || baseImage;
-                const previousActiveId = projectsState.activeProjectId;
-
-                if (needsNewTab) {
-                    projectsState.createProject();
-                }
-                
-                loadProjectFromPath(filePath).then(result => {
-                    if (result.success) {
-                        toast.success('Project loaded');
-                        if (result.path) {
-                            addRecentFile(result.path, 'project');
-                            const fileName = result.path.split(/[/\\]/).pop()?.replace('.banslice', '') || 'Untitled';
-                            const currentId = useProjectsStore.getState().activeProjectId;
-                            if (currentId) {
-                                useProjectsStore.getState().updateProjectName(currentId, fileName);
-                            }
-                        }
-                    } else {
-                        if (needsNewTab && previousActiveId) {
-                            useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
-                        }
-                        if (result.error) {
-                            toast.error(`Failed to load project: ${result.error}`);
-                        }
-                    }
-                });
-            } else if (supportedImageExtensions.includes(extension)) {
-                const projectsState = useProjectsStore.getState();
-                const existingId = projectsState.findProjectByPath(filePath);
-                if (existingId) {
-                    projectsState.switchProject(existingId);
-                    toast.info('Image is already open');
-                    return;
-                }
-                
-                const needsNewTab = projectsState.tabOrder.length === 0 || baseImage;
-                const previousActiveId = projectsState.activeProjectId;
-
-                if (needsNewTab) {
-                    projectsState.createProject();
-                }
-                
-                loadImage(filePath).then(() => {
-                    addRecentFile(filePath, 'image');
-                    toast.success('Image loaded');
-                    const fileName = filePath.split(/[/\\]/).pop() || 'Untitled';
-                    const currentId = useProjectsStore.getState().activeProjectId;
-                    if (currentId) {
-                        useProjectsStore.getState().updateProjectName(currentId, fileName);
-                    }
-                }).catch(err => {
-                    if (needsNewTab && previousActiveId) {
-                        useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
-                    }
-                    toast.error(`Failed to load image: ${err.message || 'Unknown error'}`);
-                });
-            } else {
-                toast.error('Unsupported file type. Drop an image (PNG, JPG, WebP) or project (.banslice)');
-            }
-        });
-
-        return () => {
-            unlisten.then(fn => fn());
-        };
-    }, [loadImage, addRecentFile, referenceImages, setReferenceImages, baseImage]);
 
     // Initialize base layer when a NEW image is loaded (skip for project files)
     useEffect(() => {
         if (baseImage && imagePath && !imagePath.endsWith('.banslice')) {
             setBaseLayer(baseImage.data, baseImage.width, baseImage.height);
-            // Reset history for new image
             resetHistory();
         }
     }, [imagePath, setBaseLayer, baseImage, resetHistory]);
@@ -367,435 +133,10 @@ function App() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-
-    // Check if we're working on a saved project
-    const isProject = imagePath?.endsWith('.banslice') ?? false;
-
-    const handleQuickSave = async () => {
-        setFileMenuOpen(false);
-        if (!isProject) return;
-        setIsSaving(true);
-        try {
-            await quickSave();
-            toast.success('Project saved successfully');
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Unknown error';
-            toast.error(`Failed to save project: ${message}`);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleSaveProject = async () => {
-        setFileMenuOpen(false);
-        setIsSaving(true);
-        try {
-            const path = await saveProject();
-            if (path) {
-                const fileName = path.split(/[\\/]/).pop() || 'project';
-                toast.success(`Saved as ${fileName}`);
-            }
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Unknown error';
-            toast.error(`Failed to save project: ${message}`);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleLoadProject = async () => {
-        setFileMenuOpen(false);
-        
-        if (isGenerating) {
-            toast.warning('Cannot open files while generating');
-            return;
-        }
-        
-        try {
-            const filePath = await open({
-                filters: [{
-                    name: 'BananaSlice Project',
-                    extensions: ['banslice']
-                }],
-                multiple: false,
-            });
-
-            if (!filePath || typeof filePath !== 'string') {
-                return;
-            }
-
-            const existingProjectId = findOpenProject(filePath);
-            if (existingProjectId) {
-                switchProject(existingProjectId);
-                toast.info('Project is already open');
-                return;
-            }
-
-            const needsNewTab = tabOrder.length === 0 || baseImage;
-            const previousActiveId = activeProjectId;
-            
-            if (needsNewTab) {
-                createProject();
-            }
-
-            const result = await loadProjectFromPath(filePath);
-            if (result.success) {
-                toast.success('Project loaded successfully');
-                addRecentFile(filePath, 'project');
-                const fileName = filePath.split(/[/\\]/).pop()?.replace('.banslice', '') || 'Untitled';
-                const currentProjectId = useProjectsStore.getState().activeProjectId;
-                if (currentProjectId) {
-                    updateProjectName(currentProjectId, fileName);
-                }
-            } else {
-                if (needsNewTab && previousActiveId) {
-                    useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
-                }
-                if (result.error) {
-                    toast.error(`Failed to load project: ${result.error}`);
-                }
-            }
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Unknown error';
-            toast.error(`Failed to load project: ${message}`);
-        }
-    };
-
-    const handleExport = async (format: ExportFormat) => {
-        setFileMenuOpen(false);
-        setIsExporting(true);
-        try {
-            const path = await exportImage({ format, quality: 92 });
-            if (path) {
-                const fileName = path.split(/[\\/]/).pop() || 'image';
-                toast.success(`Exported as ${fileName}`);
-            }
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Unknown error';
-            toast.error(`Export failed: ${message}`);
-        } finally {
-            setIsExporting(false);
-        }
-    };
-
-
-    // Keyboard shortcuts
-    useEffect(() => {
-        const handleKeyDown = async (e: KeyboardEvent) => {
-            // Don't trigger shortcuts when typing in inputs
-            const target = e.target as HTMLElement;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-                return;
-            }
-
-            // Save shortcuts: Ctrl+S
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                if (isProject) {
-                    await handleQuickSave();
-                } else if (baseImage) {
-                    await handleSaveProject();
-                }
-            }
-
-            // Undo: Ctrl+Z
-            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-                e.preventDefault();
-                handleUndo();
-            }
-
-            // Redo: Ctrl+Y or Ctrl+Shift+Z
-            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-                e.preventDefault();
-                handleRedo();
-            }
-
-            // Tool shortcuts (only when not holding modifier keys)
-            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-                switch (e.key.toLowerCase()) {
-                    case 'v':
-                        setActiveTool('move');
-                        break;
-                    case 'm':
-                        setActiveTool('rectangle');
-                        break;
-                    case 'l':
-                        setActiveTool('lasso');
-                        break;
-                    case 'u':
-                        setActiveTool('shape-rect');
-                        break;
-                    case 'o':
-                        setActiveTool('shape-ellipse');
-                        break;
-                    case 'd':
-                        // Deselect - clear selection
-                        clearSelection();
-                        break;
-                    case '=':
-                    case '+':
-                        // Zoom in
-                        e.preventDefault();
-                        zoomIn();
-                        break;
-                    case '-':
-                    case '_':
-                        // Zoom out
-                        e.preventDefault();
-                        zoomOut();
-                        break;
-                }
-            }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isProject, baseImage, setActiveTool, clearSelection, zoomIn, zoomOut]);
-
-
-    const handleOpenImage = async () => {
-        if (isGenerating) {
-            toast.warning('Cannot open files while generating');
-            return;
-        }
-
-        try {
-            const selected = await open({
-                multiple: false,
-                filters: [{
-                    name: 'Image',
-                    extensions: ['png', 'jpg', 'jpeg', 'webp']
-                }]
-            });
-
-            if (selected && typeof selected === 'string') {
-                const existingProjectId = findOpenProject(selected);
-                if (existingProjectId) {
-                    switchProject(existingProjectId);
-                    toast.info('Image is already open');
-                    return;
-                }
-
-                const needsNewTab = tabOrder.length === 0 || baseImage;
-                const previousActiveId = activeProjectId;
-                
-                if (needsNewTab) {
-                    createProject();
-                }
-                
-                try {
-                    await loadImage(selected);
-                    addRecentFile(selected, 'image');
-                    
-                    const fileName = selected.split(/[/\\]/).pop() || 'Untitled';
-                    const currentProjectId = useProjectsStore.getState().activeProjectId;
-                    if (currentProjectId) {
-                        updateProjectName(currentProjectId, fileName);
-                    }
-                } catch (loadError) {
-                    if (needsNewTab && previousActiveId) {
-                        useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
-                    }
-                    throw loadError;
-                }
-            }
-        } catch (error) {
-            console.error('Failed to open image:', error);
-            const message = error instanceof Error ? error.message : 'Unknown error';
-            toast.error(`Failed to load image: ${message}`);
-        }
-    };
-
-    const handleGenerate = async () => {
-        if (!baseImage || !activeSelection) {
-            setError('Please make a selection first');
-            return;
-        }
-
-        if (!prompt.trim()) {
-            setError('Please enter a prompt');
-            return;
-        }
-
-        // Check API key
-        const keyConfigured = await hasApiKey();
-        if (!keyConfigured) {
-            setError('Please configure your API key in Settings');
-            setSettingsOpen(true);
-            return;
-        }
-
-        // Check if aspect ratio adjustment is needed when reference images are used
-        const activeReferenceImages = referenceImages.filter(img => img !== '');
-        if (activeReferenceImages.length > 0) {
-            const selectionBounds = getSelectionBoundsCanvas(activeSelection);
-            if (selectionBounds) {
-                const adjustment = calculateAspectRatioAdjustment(
-                    selectionBounds.width,
-                    selectionBounds.height
-                );
-
-                if (adjustment.needsAdjustment) {
-                    // Show confirmation dialog
-                    setAspectRatioDialog({
-                        open: true,
-                        originalRatio: adjustment.originalRatio,
-                        adjustedRatio: adjustment.closestRatio,
-                        widthDiff: adjustment.adjustedWidth - adjustment.originalWidth,
-                        heightDiff: adjustment.adjustedHeight - adjustment.originalHeight,
-                        onConfirm: () => {
-                            setAspectRatioDialog(null);
-
-                            // Get current selection properties
-                            const currentWidth = activeSelection.width * (activeSelection.scaleX || 1);
-                            const currentHeight = activeSelection.height * (activeSelection.scaleY || 1);
-
-                            // Calculate scale factors to achieve new dimensions
-                            const newScaleX = adjustment.adjustedWidth / activeSelection.width;
-                            const newScaleY = adjustment.adjustedHeight / activeSelection.height;
-
-                            // Center the expansion - adjust position
-                            const widthChange = adjustment.adjustedWidth - currentWidth;
-                            const heightChange = adjustment.adjustedHeight - currentHeight;
-
-                            // Apply the new size to the selection
-                            activeSelection.set({
-                                scaleX: newScaleX,
-                                scaleY: newScaleY,
-                                left: activeSelection.left - widthChange / 2,
-                                top: activeSelection.top - heightChange / 2,
-                            });
-                            activeSelection.setCoords();
-
-                            // Re-render the canvas to show the adjusted selection
-                            if (activeSelection.canvas) {
-                                activeSelection.canvas.renderAll();
-                            }
-
-                            // Update the selection store with the modified selection
-                            setActiveSelection(activeSelection);
-
-                            toast.info(`Selection adjusted to ${adjustment.closestRatio} ratio`);
-
-                            // Now proceed with generation using the resized selection
-                            doGenerate();
-                        }
-                    });
-                    return;
-                }
-            }
-        }
-
-        // Proceed directly if no adjustment needed
-        doGenerate();
-
-        async function doGenerate() {
-            setIsGenerating(true);
-            setGenerationStage(0);
-            setError(null);
-
-            try {
-                // Validate baseImage is available
-                if (!baseImage) {
-                    throw new Error('No image loaded.');
-                }
-
-                // Validate image transform is available
-                if (!imageTransform) {
-                    throw new Error('Image transform not available. Please reload the image.');
-                }
-
-                // Stage 1: Composite visible layers and process selection
-                setGenerationStage(0);
-
-                // Get all visible layers and composite them
-                const visibleLayers = getVisibleLayers();
-                let imageDataForAPI = baseImage.data;
-
-                // If there are multiple visible layers, composite them first
-                if (visibleLayers.length > 1) {
-                    imageDataForAPI = await compositeLayersInBrowser(
-                        visibleLayers,
-                        baseImage.width,
-                        baseImage.height
-                    );
-                }
-
-                const processed = await processForAPI(
-                    imageDataForAPI,
-                    'png', // Composite is always PNG
-                    imageTransform,
-                    baseImage.width,
-                    baseImage.height
-                );
-
-                if (!processed) {
-                    throw new Error('Failed to process selection');
-                }
-
-                // Stage 2: Call generate API with optional reference images
-                setGenerationStage(1);
-                const genResult = await generateFill(
-                    model,
-                    prompt,
-                    processed.croppedImageBase64,
-                    processed.maskBase64,
-                    referenceImages.filter(img => img !== '')
-                );
-
-                if (!genResult.success || !genResult.image_base64) {
-                    throw new Error(genResult.error || 'Generation failed');
-                }
-
-                // Stage 3: Apply polygon mask to result if this was a lasso selection
-                setGenerationStage(2);
-                let finalImageBase64 = genResult.image_base64;
-                if (processed.polygonMaskBase64) {
-                    const { applyPolygonMaskToResult } = await import('./utils/selectionProcessor');
-                    finalImageBase64 = await applyPolygonMaskToResult(
-                        genResult.image_base64,
-                        processed.polygonMaskBase64,
-                        processed.bounds.width,
-                        processed.bounds.height
-                    );
-                }
-
-                // Add generated patch as a new layer
-                addLayer({
-                    name: `Edit: ${prompt.substring(0, 20)}${prompt.length > 20 ? '...' : ''}`,
-                    type: 'edit',
-                    imageData: finalImageBase64,
-                    originalImageData: genResult.image_base64,
-                    visible: true,
-                    opacity: 100,
-                    x: processed.bounds.x,
-                    y: processed.bounds.y,
-                    width: processed.bounds.width,
-                    height: processed.bounds.height,
-                    polygonPoints: processed.relativePolygonPoints,
-                });
-
-                // Clear selection and switch to move tool
-                clearSelection();
-                setActiveTool('move');
-
-                toast.success('Generation complete! New layer added.');
-
-            } catch (err) {
-                const message = err instanceof Error ? err.message : 'An unexpected error occurred';
-                setError(message);
-                toast.error(`Generation failed: ${message}`);
-            } finally {
-                setIsGenerating(false);
-            }
-        }
-    };
-
     return (
         <div className="app">
-            {/* Settings Modal */}
+            {/* Modals */}
             <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
-
-            {/* Keyboard Shortcuts Modal */}
             <KeyboardShortcuts isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
             {/* Aspect Ratio Adjustment Dialog */}
@@ -819,12 +160,8 @@ function App() {
                 confirmText="Discard & Close"
                 cancelText="Cancel"
                 variant="danger"
-                onConfirm={async () => {
-                    setCloseConfirmDialog(false);
-                    const appWindow = getCurrentWindow();
-                    await appWindow.destroy();
-                }}
-                onCancel={() => setCloseConfirmDialog(false)}
+                onConfirm={handleConfirmClose}
+                onCancel={handleCancelClose}
             />
 
             {/* Top Bar */}
@@ -847,7 +184,7 @@ function App() {
                                 <button onClick={() => { setFileMenuOpen(false); handleOpenImage(); }}>
                                     Open Image...
                                 </button>
-                                <button onClick={handleLoadProject}>
+                                <button onClick={() => { setFileMenuOpen(false); handleLoadProject(); }}>
                                     Open Project...
                                 </button>
                                 {recentFiles.length > 0 && (
@@ -860,54 +197,9 @@ function App() {
                                             {recentFiles.slice(0, 5).map((file) => (
                                                 <button
                                                     key={file.path}
-                                                    onClick={async () => {
+                                                    onClick={() => {
                                                         setFileMenuOpen(false);
-                                                        
-                                                        if (isGenerating) {
-                                                            toast.warning('Cannot open files while generating');
-                                                            return;
-                                                        }
-
-                                                        const existingId = findOpenProject(file.path);
-                                                        if (existingId) {
-                                                            switchProject(existingId);
-                                                            toast.info('File is already open');
-                                                            return;
-                                                        }
-                                                        
-                                                        const needsNewTab = tabOrder.length === 0 || baseImage;
-                                                        const previousActiveId = activeProjectId;
-
-                                                        if (needsNewTab) {
-                                                            createProject();
-                                                        }
-                                                        
-                                                        try {
-                                                            if (file.type === 'project') {
-                                                                const result = await loadProjectFromPath(file.path);
-                                                                if (result.success) {
-                                                                    const fileName = file.path.split(/[/\\]/).pop()?.replace('.banslice', '') || 'Untitled';
-                                                                    updateProjectName(useProjectsStore.getState().activeProjectId!, fileName);
-                                                                } else {
-                                                                    if (needsNewTab && previousActiveId) {
-                                                                        useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
-                                                                    }
-                                                                    if (result.error) {
-                                                                        toast.error(`Failed to load project: ${result.error}`);
-                                                                    }
-                                                                }
-                                                            } else {
-                                                                await loadImage(file.path);
-                                                                const fileName = file.path.split(/[/\\]/).pop() || 'Untitled';
-                                                                updateProjectName(useProjectsStore.getState().activeProjectId!, fileName);
-                                                            }
-                                                        } catch (err) {
-                                                            if (needsNewTab && previousActiveId) {
-                                                                useProjectsStore.getState().forceCloseProject(useProjectsStore.getState().activeProjectId!);
-                                                            }
-                                                            const message = err instanceof Error ? err.message : 'Unknown error';
-                                                            toast.error(`Failed to load file: ${message}`);
-                                                        }
+                                                        handleOpenRecentFile(file.path, file.type);
                                                     }}
                                                     title={file.path}
                                                 >
@@ -918,11 +210,11 @@ function App() {
                                     </div>
                                 )}
                                 <div className="menu-divider" />
-                                <button onClick={handleQuickSave} disabled={!isProject}>
+                                <button onClick={() => { setFileMenuOpen(false); handleQuickSave(); }} disabled={!isProject}>
                                     Save
                                     <span className="menu-shortcut">Ctrl+S</span>
                                 </button>
-                                <button onClick={handleSaveProject} disabled={!baseImage}>
+                                <button onClick={() => { setFileMenuOpen(false); handleSaveProject(); }} disabled={!baseImage}>
                                     Save Project As...
                                 </button>
                                 <div className="menu-divider" />
@@ -932,15 +224,9 @@ function App() {
                                         <span className="submenu-arrow">▶</span>
                                     </button>
                                     <div className="submenu">
-                                        <button onClick={() => handleExport('png')} disabled={!baseImage}>
-                                            PNG
-                                        </button>
-                                        <button onClick={() => handleExport('jpeg')} disabled={!baseImage}>
-                                            JPEG
-                                        </button>
-                                        <button onClick={() => handleExport('webp')} disabled={!baseImage}>
-                                            WebP
-                                        </button>
+                                        <button onClick={() => { setFileMenuOpen(false); handleExport('png'); }} disabled={!baseImage}>PNG</button>
+                                        <button onClick={() => { setFileMenuOpen(false); handleExport('jpeg'); }} disabled={!baseImage}>JPEG</button>
+                                        <button onClick={() => { setFileMenuOpen(false); handleExport('webp'); }} disabled={!baseImage}>WebP</button>
                                     </div>
                                 </div>
                             </div>
@@ -953,25 +239,11 @@ function App() {
                 </div>
                 <div className="top-bar-right">
                     <Tooltip content="Undo" shortcut="Ctrl+Z" position="bottom">
-                        <button
-                            className="top-bar-btn icon-btn"
-                            onClick={handleUndo}
-                            disabled={!canUndo()}
-                            aria-label="Undo"
-                        >
-                            ↩
-                        </button>
+                        <button className="top-bar-btn icon-btn" onClick={handleUndo} disabled={!canUndo()} aria-label="Undo">↩</button>
                     </Tooltip>
                     <Tooltip content="Redo" shortcut="Ctrl+Y" position="bottom">
-                        <button
-                            className="top-bar-btn icon-btn"
-                            onClick={handleRedo}
-                            disabled={!canRedo()}
-                            aria-label="Redo"
-                        >
-                            ↪
-                        </button>
-                </Tooltip>
+                        <button className="top-bar-btn icon-btn" onClick={handleRedo} disabled={!canRedo()} aria-label="Redo">↪</button>
+                    </Tooltip>
                 </div>
             </header>
 
@@ -984,29 +256,17 @@ function App() {
                 <aside className="toolbar left-toolbar">
                     <div className="tool-group">
                         <Tooltip content="Move Tool" shortcut="V" position="right" description="Select and move layers">
-                            <button
-                                className={`tool-btn ${activeTool === 'move' ? 'active' : ''}`}
-                                onClick={() => setActiveTool('move')}
-                                aria-label="Move Tool"
-                            >
+                            <button className={`tool-btn ${activeTool === 'move' ? 'active' : ''}`} onClick={() => setActiveTool('move')} aria-label="Move Tool">
                                 <img src="/move.svg" alt="Move" className="tool-icon" />
                             </button>
                         </Tooltip>
                         <Tooltip content="Rectangle Select" shortcut="M" position="right" description="Draw rectangular selections">
-                            <button
-                                className={`tool-btn ${activeTool === 'rectangle' ? 'active' : ''}`}
-                                onClick={() => setActiveTool('rectangle')}
-                                aria-label="Rectangle Select"
-                            >
+                            <button className={`tool-btn ${activeTool === 'rectangle' ? 'active' : ''}`} onClick={() => setActiveTool('rectangle')} aria-label="Rectangle Select">
                                 <img src="/rectangle.svg" alt="Rectangle" className="tool-icon" />
                             </button>
                         </Tooltip>
                         <Tooltip content="Lasso Select [BETA]" shortcut="L" position="right" description="Draw freeform selections">
-                            <button
-                                className={`tool-btn ${activeTool === 'lasso' ? 'active' : ''}`}
-                                onClick={() => setActiveTool('lasso')}
-                                aria-label="Lasso Select"
-                            >
+                            <button className={`tool-btn ${activeTool === 'lasso' ? 'active' : ''}`} onClick={() => setActiveTool('lasso')} aria-label="Lasso Select">
                                 <img src="/lasso.svg" alt="Lasso" className="tool-icon" />
                             </button>
                         </Tooltip>
@@ -1014,31 +274,18 @@ function App() {
                     <div className="tool-divider"></div>
                     <div className="tool-group">
                         <Tooltip content="Rectangle Shape" shortcut="U" position="right" description="Draw filled rectangles">
-                            <button
-                                className={`tool-btn ${activeTool === 'shape-rect' ? 'active' : ''}`}
-                                onClick={() => setActiveTool('shape-rect')}
-                                aria-label="Rectangle Shape"
-                            >
+                            <button className={`tool-btn ${activeTool === 'shape-rect' ? 'active' : ''}`} onClick={() => setActiveTool('shape-rect')} aria-label="Rectangle Shape">
                                 <img src="/shape-rect.svg" alt="Rectangle Shape" className="tool-icon" />
                             </button>
                         </Tooltip>
                         <Tooltip content="Ellipse Shape" shortcut="O" position="right" description="Draw filled ellipses">
-                            <button
-                                className={`tool-btn ${activeTool === 'shape-ellipse' ? 'active' : ''}`}
-                                onClick={() => setActiveTool('shape-ellipse')}
-                                aria-label="Ellipse Shape"
-                            >
+                            <button className={`tool-btn ${activeTool === 'shape-ellipse' ? 'active' : ''}`} onClick={() => setActiveTool('shape-ellipse')} aria-label="Ellipse Shape">
                                 <img src="/shape-ellipse.svg" alt="Ellipse Shape" className="tool-icon" />
                             </button>
                         </Tooltip>
                         <Tooltip content="Shape Color" position="right" description="Click to change shape fill color">
                             <label className="color-picker-btn" style={{ backgroundColor: shapeColor }}>
-                                <input
-                                    type="color"
-                                    value={shapeColor}
-                                    onChange={(e) => setShapeColor(e.target.value)}
-                                    className="color-picker-input"
-                                />
+                                <input type="color" value={shapeColor} onChange={(e) => setShapeColor(e.target.value)} className="color-picker-input" />
                             </label>
                         </Tooltip>
                     </div>
@@ -1060,25 +307,10 @@ function App() {
                 {/* Canvas Area */}
                 <div className={`canvas-container ${baseImage ? 'has-image' : ''} tool-${activeTool}`}>
                     {/* Progress Overlays */}
-                    <ProgressIndicator
-                        visible={isGenerating}
-                        message="Generating..."
-                        subMessage={generationStages[generationStage]}
-                        stages={getProgressStages()}
-                    />
-                    <ProgressIndicator
-                        visible={isLoading}
-                        message="Loading image..."
-                        subMessage="Please wait"
-                    />
-                    <ProgressIndicator
-                        visible={isSaving}
-                        message="Saving project..."
-                    />
-                    <ProgressIndicator
-                        visible={isExporting}
-                        message="Exporting image..."
-                    />
+                    <ProgressIndicator visible={isGenerating} message="Generating..." subMessage={generationStages[generationStage]} stages={getProgressStages()} />
+                    <ProgressIndicator visible={isLoading} message="Loading image..." subMessage="Please wait" />
+                    <ProgressIndicator visible={isSaving} message="Saving project..." />
+                    <ProgressIndicator visible={isExporting} message="Exporting image..." />
 
                     {!baseImage ? (
                         <div className="canvas-wrapper">
@@ -1117,11 +349,7 @@ function App() {
 
                             <div className="model-selector">
                                 <label className="input-label">Model</label>
-                                <select
-                                    className="select-input"
-                                    value={model}
-                                    onChange={(e) => setModel(e.target.value as AIModel)}
-                                >
+                                <select className="select-input" value={model} onChange={(e) => setModel(e.target.value as AIModel)}>
                                     <option value="nano-banana-pro">Nano Banana Pro</option>
                                     <option value="nano-banana">Nano Banana (Fast)</option>
                                 </select>
@@ -1134,9 +362,7 @@ function App() {
                                 externalDragHoverIndex={dragHoverSlot}
                             />
 
-                            {error && (
-                                <div className="error-message">{error}</div>
-                            )}
+                            {error && <div className="error-message">{error}</div>}
 
                             <button
                                 className={`generate-btn ${isGenerating ? 'loading' : ''}`}
@@ -1157,7 +383,6 @@ function App() {
                         </div>
                     </div>
 
-                    {/* Layer Panel */}
                     <LayerPanel />
                 </aside>
             </main>
@@ -1167,25 +392,13 @@ function App() {
                 <div className="bottom-bar-left">
                     <span className="status-text">
                         {isGenerating ? (
-                            <span className="status-loading">
-                                <span className="progress-spinner" />
-                                {generationStages[generationStage]}...
-                            </span>
+                            <span className="status-loading"><span className="progress-spinner" />{generationStages[generationStage]}...</span>
                         ) : isLoading ? (
-                            <span className="status-loading">
-                                <span className="progress-spinner" />
-                                Loading...
-                            </span>
+                            <span className="status-loading"><span className="progress-spinner" />Loading...</span>
                         ) : isSaving ? (
-                            <span className="status-loading">
-                                <span className="progress-spinner" />
-                                Saving...
-                            </span>
+                            <span className="status-loading"><span className="progress-spinner" />Saving...</span>
                         ) : isExporting ? (
-                            <span className="status-loading">
-                                <span className="progress-spinner" />
-                                Exporting...
-                            </span>
+                            <span className="status-loading"><span className="progress-spinner" />Exporting...</span>
                         ) : baseImage ? 'Ready' : 'No image loaded'}
                     </span>
                 </div>
@@ -1214,4 +427,3 @@ function App() {
 }
 
 export default App;
-
