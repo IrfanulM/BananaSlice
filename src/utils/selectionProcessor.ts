@@ -122,6 +122,20 @@ function drawPolygonPath(
     ctx.closePath();
 }
 
+// Helper to convert format string to proper MIME type
+function formatToMimeType(format: string): string {
+    switch (format.toLowerCase()) {
+        case 'jpg':
+        case 'jpeg':
+            return 'image/jpeg';
+        case 'webp':
+            return 'image/webp';
+        case 'png':
+        default:
+            return 'image/png';
+    }
+}
+
 // Simple crop - keep all content for context (proper inpainting)
 export async function cropImageToBounds(
     imageBase64: string,
@@ -148,7 +162,8 @@ export async function cropImageToBounds(
                 0, 0, bounds.width, bounds.height
             );
 
-            const dataUrl = canvas.toDataURL(`image/${format}`);
+            const mimeType = formatToMimeType(format);
+            const dataUrl = canvas.toDataURL(mimeType);
             const base64 = dataUrl.split(',')[1];
             resolve(base64);
         };
@@ -158,7 +173,8 @@ export async function cropImageToBounds(
         if (imageBase64.startsWith('data:')) {
             img.src = imageBase64;
         } else {
-            img.src = `data:image/${format};base64,${imageBase64}`;
+            const mimeType = formatToMimeType(format);
+            img.src = `data:${mimeType};base64,${imageBase64}`;
         }
     });
 }

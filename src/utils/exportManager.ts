@@ -37,8 +37,23 @@ export const exportImage = async (options: ExportOptions): Promise<string | null
         throw new Error('Failed to create canvas context');
     }
 
+    // Helper to convert format string to proper MIME type
+    const formatToMimeType = (format: string): string => {
+        switch (format.toLowerCase()) {
+            case 'jpg':
+            case 'jpeg':
+                return 'image/jpeg';
+            case 'webp':
+                return 'image/webp';
+            case 'png':
+            default:
+                return 'image/png';
+        }
+    };
+
     // Load and draw base image
-    const baseImg = await loadImage(`data:image/${baseImage.format};base64,${baseImage.data}`);
+    const baseMimeType = formatToMimeType(baseImage.format);
+    const baseImg = await loadImage(`data:${baseMimeType};base64,${baseImage.data}`);
     ctx.drawImage(baseImg, 0, 0);
 
     // Draw each visible layer in order (bottom to top)
@@ -96,7 +111,7 @@ export const exportImage = async (options: ExportOptions): Promise<string | null
     }
 
     // Convert canvas to the desired format
-    const mimeType = `image/${options.format}`;
+    const mimeType = formatToMimeType(options.format);
     const quality = options.quality !== undefined ? options.quality / 100 : 0.92;
 
     const dataUrl = canvas.toDataURL(mimeType, quality);
