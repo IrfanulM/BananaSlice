@@ -130,7 +130,7 @@ export function useGeneration({ prompt, referenceImages, onOpenSettings }: UseGe
 
             // Add generated patch as a new layer
             addLayer({
-                name: `Edit: ${prompt.substring(0, 20)}${prompt.length > 20 ? '...' : ''}`,
+                name: `${prompt.substring(0, 25)}${prompt.length > 25 ? '...' : ''}`,
                 type: 'edit',
                 imageData: finalImageBase64,
                 originalImageData: genResult.image_base64,

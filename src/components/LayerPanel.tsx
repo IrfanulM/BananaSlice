@@ -2,11 +2,20 @@
 import { useState } from 'react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { useLayerStore } from '../store/layerStore';
+import { toast } from '../store/toastStore';
+import { exportLayerImage } from '../utils/exportManager';
 import { Tooltip } from './Tooltip';
 import './LayerPanel.css';
 
 interface LayerPanelProps {
     className?: string;
+}
+
+interface ContextMenuState {
+    visible: boolean;
+    x: number;
+    y: number;
+    layerId: string | null;
 }
 
 export function LayerPanel({ className = '' }: LayerPanelProps) {
@@ -24,6 +33,12 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
+    const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+        visible: false,
+        x: 0,
+        y: 0,
+        layerId: null,
+    });
 
     // Display layers in reverse order (top to bottom visually)
     const displayLayers = [...layers].reverse();
@@ -77,6 +92,77 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
 
     const isBaseLayer = (type: string) => type === 'base';
 
+    // Context menu handlers
+    const handleContextMenu = (e: React.MouseEvent, layerId: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Calculate position, ensuring menu stays on screen
+        const menuWidth = 160;
+        const menuHeight = 50;
+        let x = e.clientX;
+        let y = e.clientY;
+        
+        // Adjust if too close to right edge
+        if (x + menuWidth > window.innerWidth) {
+            x = e.clientX - menuWidth;
+        }
+        // Adjust if too close to bottom edge
+        if (y + menuHeight > window.innerHeight) {
+            y = e.clientY - menuHeight;
+        }
+        
+        setContextMenu({
+            visible: true,
+            x,
+            y,
+            layerId,
+        });
+    };
+
+    const closeContextMenu = () => {
+        setContextMenu(prev => ({ ...prev, visible: false, layerId: null }));
+    };
+
+    const handleExportLayer = async () => {
+        if (!contextMenu.layerId) return;
+        closeContextMenu();
+        
+        try {
+            const path = await exportLayerImage(contextMenu.layerId);
+            if (path) {
+                const fileName = path.split(/[\\/]/).pop() || 'layer';
+                toast.success(`Exported layer as ${fileName}`);
+            }
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            toast.error(`Failed to export layer: ${message}`);
+        }
+    };
+
+    const handleDuplicateFromContextMenu = () => {
+        if (!contextMenu.layerId) return;
+        closeContextMenu();
+        handleDuplicate(contextMenu.layerId);
+    };
+
+    const handleToggleVisibilityFromContextMenu = () => {
+        if (!contextMenu.layerId) return;
+        closeContextMenu();
+        handleVisibilityToggle(contextMenu.layerId);
+    };
+
+    const handleDeleteFromContextMenu = () => {
+        if (!contextMenu.layerId) return;
+        closeContextMenu();
+        handleDelete(contextMenu.layerId);
+    };
+
+    // Get the layer for context menu to check visibility state
+    const contextMenuLayer = contextMenu.layerId 
+        ? layers.find(l => l.id === contextMenu.layerId) 
+        : null;
+
     return (
         <div className={`layer-panel ${className}`}>
             <div className="layer-panel-header">
@@ -109,6 +195,7 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
                                                 {...provided.dragHandleProps}
                                                 className={`layer-item ${activeLayerId === layer.id ? 'active' : ''} ${!layer.visible && !isBaseLayer(layer.type) ? 'hidden-layer' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
                                                 onClick={() => setActiveLayer(layer.id)}
+                                                onContextMenu={(e) => handleContextMenu(e, layer.id)}
                                                 style={{
                                                     ...provided.draggableProps.style,
                                                 }}
@@ -198,17 +285,6 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
                                                 {/* Actions */}
                                                 {!isBaseLayer(layer.type) && (
                                                     <div className="layer-actions">
-                                                        <Tooltip content="Duplicate layer" position="top">
-                                                            <button
-                                                                className="layer-action"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDuplicate(layer.id);
-                                                                }}
-                                                            >
-                                                                <img src="/duplicate.svg" alt="Duplicate" className="action-icon" />
-                                                            </button>
-                                                        </Tooltip>
                                                         <Tooltip content="Delete layer" position="top">
                                                             <button
                                                                 className="layer-action delete"
@@ -232,6 +308,45 @@ export function LayerPanel({ className = '' }: LayerPanelProps) {
                     )}
                 </Droppable>
             </DragDropContext>
+
+            {/* Context Menu */}
+            {contextMenu.visible && (
+                <>
+                    <div 
+                        className="context-menu-overlay" 
+                        onClick={closeContextMenu}
+                        onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}
+                    />
+                    <div 
+                        className="dropdown-menu"
+                        style={{ 
+                            position: 'fixed', 
+                            left: contextMenu.x, 
+                            top: contextMenu.y,
+                            margin: 0,
+                        }}
+                    >
+                        {contextMenuLayer && !isBaseLayer(contextMenuLayer.type) && (
+                            <button onClick={handleToggleVisibilityFromContextMenu}>
+                                {contextMenuLayer.visible ? 'Hide' : 'Unhide'}
+                            </button>
+                        )}
+                        {contextMenuLayer && !isBaseLayer(contextMenuLayer.type) && (
+                            <button onClick={handleDuplicateFromContextMenu}>
+                                Duplicate
+                            </button>
+                        )}
+                        <button onClick={handleExportLayer}>
+                            Export
+                        </button>
+                        {contextMenuLayer && !isBaseLayer(contextMenuLayer.type) && (
+                            <button onClick={handleDeleteFromContextMenu}>
+                                Delete
+                            </button>
+                        )}
+                    </div>
+                </>
+            )}
         </div>
     );
 }

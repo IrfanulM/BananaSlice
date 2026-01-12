@@ -135,3 +135,60 @@ function loadImage(src: string): Promise<HTMLImageElement> {
         img.src = src;
     });
 }
+
+/**
+ * Export a single layer's original image (without feathering/masking)
+ * For generated layers, this exports the raw AI output in full resolution.
+ */
+export const exportLayerImage = async (layerId: string): Promise<string | null> => {
+    const canvasState = useCanvasStore.getState();
+    const layerState = useLayerStore.getState();
+    
+    const layer = layerState.layers.find(l => l.id === layerId);
+    if (!layer) {
+        throw new Error('Layer not found');
+    }
+
+    // Determine the image data to export
+    let imageData: string;
+    let defaultName: string;
+
+    if (layer.type === 'base') {
+        // For base layer, use the original base image
+        if (!canvasState.baseImage) {
+            throw new Error('Base image not available');
+        }
+        imageData = canvasState.baseImage.data;
+        defaultName = 'background';
+    } else {
+        // For other layers, prefer originalImageData (unprocessed AI output)
+        // Fall back to imageData if originalImageData doesn't exist
+        imageData = layer.originalImageData ?? layer.imageData;
+        // Clean up layer name for filename
+        defaultName = layer.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    }
+
+    if (!imageData) {
+        throw new Error('No image data available for this layer');
+    }
+
+    // Show save dialog
+    const filePath = await save({
+        filters: [{
+            name: 'PNG Image',
+            extensions: ['png']
+        }],
+        defaultPath: `${defaultName}.png`
+    });
+
+    if (!filePath) {
+        return null; // User cancelled
+    }
+
+    // Convert base64 to binary and write
+    const binaryData = Uint8Array.from(atob(imageData), c => c.charCodeAt(0));
+    await writeFile(filePath, binaryData);
+
+    return filePath;
+};
+
