@@ -4,6 +4,11 @@ All notable changes to BananaSlice will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.4] - 2026-02-14
+
+### Fixed
+- Exporting layers with feathering applied
+
 ## [0.1.3] - 2025-01-12
 
 ### Added

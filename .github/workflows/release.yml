@@ -62,6 +62,8 @@ jobs:
           tagName: v__VERSION__
           releaseName: "BananaSlice v__VERSION__"
           releaseBody: |
+            #### Changelog: https://github.com/IrfanulM/BananaSlice/blob/main/CHANGELOG.md
+            
             ## Download Instructions
             
             Choose the right file for your operating system:

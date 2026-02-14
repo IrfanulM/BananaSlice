@@ -3,7 +3,7 @@
 # BananaSlice
 Open-Source alternative to Adobe Photoshop's Generative Fill using Nano Banana & Nano Banana Pro
 
-[![Version: 0.1.3](https://img.shields.io/badge/Version-0.1.3-yellow.svg)](https://github.com/IrfanulM/BananaSlice/releases)
+[![Version: 0.1.4](https://img.shields.io/badge/Version-0.1.4-yellow.svg)](https://github.com/IrfanulM/BananaSlice/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ![Demo](https://raw.githubusercontent.com/IrfanulM/BananaSlice/main/demo.gif)
