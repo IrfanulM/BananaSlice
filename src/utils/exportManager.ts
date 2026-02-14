@@ -5,6 +5,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { useCanvasStore } from '../store/canvasStore';
 import { useLayerStore } from '../store/layerStore';
+import { applyLayerFeathering, applySharpPolygonMask } from './layerCompositor';
 
 export type ExportFormat = 'png' | 'jpeg' | 'webp';
 
@@ -58,16 +59,35 @@ export const exportImage = async (options: ExportOptions): Promise<string | null
 
     // Draw each visible layer in order (bottom to top)
     for (const layer of layers) {
-        if (layer.type === 'base') continue; // Already drawn
-        if (!layer.visible) continue; // Skip hidden layers
+        if (layer.type === 'base') continue;
+        if (!layer.visible) continue;
 
         try {
-            const layerImg = await loadImage(`data:image/png;base64,${layer.imageData}`);
+            let finalImageData = layer.imageData;
 
-            // Apply opacity
+            // Use original data as the source if available for better quality/re-masking
+            if (layer.originalImageData) {
+                const featherRadius = layer.featherRadius ?? 0;
+                
+                if (featherRadius > 0) {
+                    const feathered = await applyLayerFeathering(layer);
+                    if (feathered) finalImageData = feathered;
+                } else if (layer.polygonPoints && layer.polygonPoints.length >= 3) {
+                    const masked = await applySharpPolygonMask(layer);
+                    if (masked) finalImageData = masked;
+                } else {
+                    finalImageData = layer.originalImageData;
+                }
+            }
+
+            // Robust Data URL construction
+            const dataUrl = finalImageData.startsWith('data:')
+                ? finalImageData
+                : `data:image/png;base64,${finalImageData}`;
+                
+            const layerImg = await loadImage(dataUrl);
+
             ctx.globalAlpha = layer.opacity / 100;
-
-            // Draw at the layer's position and size
             ctx.drawImage(
                 layerImg,
                 layer.x || 0,
@@ -75,8 +95,6 @@ export const exportImage = async (options: ExportOptions): Promise<string | null
                 layer.width || layerImg.width,
                 layer.height || layerImg.height
             );
-
-            // Reset alpha
             ctx.globalAlpha = 1;
         } catch (err) {
             console.error('Failed to draw layer:', layer.id, err);
