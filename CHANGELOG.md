@@ -4,6 +4,18 @@ All notable changes to BananaSlice will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+# [0.1.5] - 2026-03-08
+
+### Added
+- Smart Select tool for object selection
+
+### Changed
+- Improved selection border consistency
+- Beta badge to indicate WIP instead of just text
+
+### Fixed
+- Canvas rerendering everytime a tool switch occurs
+
 ## [0.1.4] - 2026-02-14
 
 ### Fixed
