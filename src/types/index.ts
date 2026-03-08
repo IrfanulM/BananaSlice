@@ -1,7 +1,7 @@
 // BananaSlice - Type Definitions
 
 // Tool types
-export type Tool = 'move' | 'lasso' | 'rectangle' | 'shape-rect' | 'shape-ellipse';
+export type Tool = 'move' | 'lasso' | 'rectangle' | 'smart-select' | 'shape-rect' | 'shape-ellipse';
 
 // AI Model types
 export type AIModel = 'nano-banana-pro' | 'nano-banana';

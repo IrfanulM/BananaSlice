@@ -265,9 +265,14 @@ function App() {
                                 <img src="/rectangle.svg" alt="Rectangle" className="tool-icon" />
                             </button>
                         </Tooltip>
-                        <Tooltip content="Lasso Select [BETA]" shortcut="L" position="right" description="Draw freeform selections">
+                        <Tooltip content={<>Lasso Select <span className="beta-badge">BETA</span></>} shortcut="L" position="right" description="Draw freeform selections">
                             <button className={`tool-btn ${activeTool === 'lasso' ? 'active' : ''}`} onClick={() => setActiveTool('lasso')} aria-label="Lasso Select">
                                 <img src="/lasso.svg" alt="Lasso" className="tool-icon" />
+                            </button>
+                        </Tooltip>
+                        <Tooltip content={<>Smart Select <span className="beta-badge">BETA</span></>} shortcut="W" position="right" description="Click on an object to auto-select it">
+                            <button className={`tool-btn ${activeTool === 'smart-select' ? 'active' : ''}`} onClick={() => setActiveTool('smart-select')} aria-label="Smart Select">
+                                <img src="/smart-select.svg" alt="Smart Select" className="tool-icon" />
                             </button>
                         </Tooltip>
                     </div>

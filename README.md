@@ -12,7 +12,7 @@ Open-Source alternative to Adobe Photoshop's Generative Fill using Nano Banana &
 
 - **AI-Powered Generative Fill**: Fill selections using Google Gemini's Nano Banana and Nano Banana Pro models
 - **Layer-Based Editing**: Non-destructive workflow with layer visibility, opacity, and reordering
-- **Multiple Selection Tools**: Rectangle, lasso, and shape-based selections
+- **Multiple Selection Tools**: Rectangle, lasso, and smart selections
 - **Project Files**: Save and load projects with full layer history (`.banslice` format)
 - **Reference Images**: Guide AI generation with optional reference images
 - **Secure API Storage**: API keys encrypted via OS native keychain

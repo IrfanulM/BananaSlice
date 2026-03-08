@@ -4,6 +4,8 @@
 import { useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas as FabricCanvas, Rect, Polyline, Point } from 'fabric';
+import { SELECTION_STYLE_DRAWING, SELECTION_STYLE_COMPLETE, createRenderedSelection } from '../../utils/selectionStyle';
+import { douglasPeucker } from '../../utils/contourTracer';
 import { useToolStore } from '../../store/toolStore';
 import { useSelectionStore } from '../../store/selectionStore';
 
@@ -54,6 +56,7 @@ export function useSelectionTools({
 
             // Clear any existing selection before starting new one
             clearSelection();
+            setActiveSelection(null);
 
             isDrawing = true;
             startX = pointer.x;
@@ -84,12 +87,7 @@ export function useSelectionTools({
                     top: height >= 0 ? startY : pointer.y,
                     width: Math.abs(width),
                     height: Math.abs(height),
-                    fill: '',
-                    stroke: '#000',
-                    strokeWidth: 1,
-                    strokeDashArray: [5, 5],
-                    selectable: false,
-                    evented: false,
+                    ...SELECTION_STYLE_DRAWING,
                 });
 
                 canvas.add(activeSelectionRef.current);
@@ -102,13 +100,9 @@ export function useSelectionTools({
                     canvas.remove(activeSelectionRef.current);
                 }
 
+                // Use basic Polyline for drawing preview (recreated every frame)
                 activeSelectionRef.current = new Polyline(lassoPoints, {
-                    fill: '',
-                    stroke: '#000',
-                    strokeWidth: 1,
-                    strokeDashArray: [5, 5],
-                    selectable: false,
-                    evented: false,
+                    ...SELECTION_STYLE_DRAWING,
                 });
 
                 canvas.add(activeSelectionRef.current);
@@ -117,14 +111,30 @@ export function useSelectionTools({
         };
 
         const handleMouseUp = () => {
-            // Add yellow fill to the completed selection
-            if (activeSelectionRef.current) {
-                activeSelectionRef.current.set({
-                    fill: 'rgba(255, 215, 0, 0.1)',
-                });
-                canvas.renderAll();
+            if (!isDrawing) return;
 
-                // Sync selection to store for API processing
+            // For lasso: simplify and render as bitmap (same as smart selection)
+            if (activeTool === 'lasso' && lassoPoints.length >= 3) {
+                // Remove the drawing preview
+                if (activeSelectionRef.current) {
+                    canvas.remove(activeSelectionRef.current);
+                    activeSelectionRef.current = null;
+                }
+
+                const rawPoints = lassoPoints.map(p => ({ x: p.x, y: p.y }));
+                const simplified = douglasPeucker(rawPoints, 3.0);
+
+                activeSelectionRef.current = createRenderedSelection(simplified, true);
+                canvas.add(activeSelectionRef.current);
+            } else if (activeSelectionRef.current) {
+                // Rectangle: just add the fill
+                activeSelectionRef.current.set({
+                    fill: SELECTION_STYLE_COMPLETE.fill,
+                });
+            }
+
+            if (activeSelectionRef.current) {
+                canvas.renderAll();
                 setActiveSelection(activeSelectionRef.current);
             }
 

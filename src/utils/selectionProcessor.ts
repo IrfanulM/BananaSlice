@@ -1,5 +1,7 @@
 // Selection processing utilities for API preparation
 
+import { formatToMimeType } from './imageUtils';
+
 export interface SelectionBounds {
     x: number;
     y: number;
@@ -67,6 +69,14 @@ export function transformToImageSpace(
 export function extractPolygonPoints(selectionObject: any): PolygonPoint[] | null {
     if (!selectionObject) return null;
 
+    // Rendered selection images (from createRenderedSelection) store points as custom data
+    if (selectionObject._isSelectionImage && selectionObject.data?.polygonPoints) {
+        return selectionObject.data.polygonPoints.map((pt: any) => ({
+            x: pt.x,
+            y: pt.y,
+        }));
+    }
+
     if (selectionObject.type === 'polyline' && selectionObject.points && selectionObject.points.length >= 3) {
         // Fabric.js Polyline stores points relative to pathOffset
         // The object's bounding rect gives us the correct canvas position
@@ -122,19 +132,7 @@ function drawPolygonPath(
     ctx.closePath();
 }
 
-// Helper to convert format string to proper MIME type
-function formatToMimeType(format: string): string {
-    switch (format.toLowerCase()) {
-        case 'jpg':
-        case 'jpeg':
-            return 'image/jpeg';
-        case 'webp':
-            return 'image/webp';
-        case 'png':
-        default:
-            return 'image/png';
-    }
-}
+
 
 // Simple crop - keep all content for context (proper inpainting)
 export async function cropImageToBounds(
