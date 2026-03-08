@@ -8,6 +8,7 @@ import { useCanvasStore } from '../../store/canvasStore';
 import { useToolStore } from '../../store/toolStore';
 import { useLayerStore } from '../../store/layerStore';
 import { applyLayerFeathering, applySharpPolygonMask } from '../../utils/layerCompositor';
+import { isSelectionTool, isShapeTool } from '../../utils/toolHelpers';
 
 interface UseLayerRendererOptions {
     fabricRef: MutableRefObject<FabricCanvas | null>;
@@ -68,8 +69,8 @@ export function useLayerRenderer({
 
         // Process each non-base layer
         const processAllLayers = async () => {
-            const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
-            const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
+            const selTool = isSelectionTool(activeTool);
+            const shapeTool = isShapeTool(activeTool);
 
             // Check if base image has actually loaded
             if (!baseImageObjectRef.current) {
@@ -168,9 +169,9 @@ export function useLayerRenderer({
                     scaleY: targetScaleY,
                     visible: layer.visible,
                     opacity: layer.opacity / 100,
-                    selectable: !isSelectionTool,
-                    evented: !isSelectionTool,
-                    hoverCursor: isSelectionTool ? 'crosshair' : (isShapeTool ? 'move' : 'default'),
+                    selectable: !selTool,
+                    evented: !selTool,
+                    hoverCursor: selTool ? 'crosshair' : (shapeTool ? 'move' : 'default'),
                     borderColor: '#FFD700',
                     cornerColor: '#FFD700',
                     cornerStyle: 'circle',

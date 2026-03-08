@@ -3,8 +3,8 @@
 
 import { useEffect, useCallback } from 'react';
 import type { MutableRefObject } from 'react';
-import { Canvas as FabricCanvas, Polyline, Point } from 'fabric';
-import { SELECTION_STYLE_COMPLETE } from '../../utils/selectionStyle';
+import { Canvas as FabricCanvas } from 'fabric';
+import { createRenderedSelection } from '../../utils/selectionStyle';
 import { useToolStore } from '../../store/toolStore';
 import { useSelectionStore } from '../../store/selectionStore';
 import { useCanvasStore } from '../../store/canvasStore';
@@ -77,7 +77,7 @@ export function useSmartSelection({
                     baseImage.height,
                     imageX,
                     imageY,
-                    2.0
+                    6.0
                 );
 
                 if (result.polygon.length < 3) {
@@ -95,25 +95,20 @@ export function useSmartSelection({
                 }
 
                 // Convert image-space polygon points to canvas-space
-                const canvasPoints = result.polygon.map(
-                    (pt) =>
-                        new Point(
-                            pt.x * imageTransform.scaleX + imageTransform.left,
-                            pt.y * imageTransform.scaleY + imageTransform.top
-                        )
-                );
+                const canvasPoints = result.polygon.map((pt) => ({
+                    x: pt.x * imageTransform.scaleX + imageTransform.left,
+                    y: pt.y * imageTransform.scaleY + imageTransform.top,
+                }));
 
-                // Create a Fabric.js Polyline — same style as all other selections
-                const polyline = new Polyline(canvasPoints, {
-                    ...SELECTION_STYLE_COMPLETE,
-                });
+                // Render selection as a bitmap image with dashes drawn via Canvas 2D
+                const selectionImg = createRenderedSelection(canvasPoints, true);
 
-                activeSelectionRef.current = polyline;
-                canvas.add(polyline);
+                activeSelectionRef.current = selectionImg;
+                canvas.add(selectionImg);
                 canvas.renderAll();
 
                 // Store in selection store so the Generate Fill pipeline can use it
-                setActiveSelection(polyline);
+                setActiveSelection(selectionImg);
 
             } catch (err) {
                 console.error('[SmartSelection] Segmentation failed:', err);

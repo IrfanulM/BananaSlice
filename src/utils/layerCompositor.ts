@@ -2,6 +2,7 @@
 // No backend calls needed!
 
 import type { Layer } from '../types';
+import { loadImage } from './imageUtils';
 
 /**
  * Create a feathered polygon mask using inset polygon and blur
@@ -337,18 +338,4 @@ function createRectangularFeatheredMask(
     return maskCanvas;
 }
 
-/**
- * Load a base64 image into an HTMLImageElement
- */
-function loadImage(base64Data: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        // Handle both data URLs and raw base64
-        img.src = base64Data.startsWith('data:')
-            ? base64Data
-            : `data:image/png;base64,${base64Data}`;
-    });
-}
 

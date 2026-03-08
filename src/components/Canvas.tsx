@@ -8,6 +8,7 @@ import { useToolStore } from '../store/toolStore';
 import { useSelectionStore } from '../store/selectionStore';
 import { useLayerStore } from '../store/layerStore';
 import { ContextToolbar } from './ContextToolbar';
+import { isSelectionTool, isShapeTool, isDrawingTool } from '../utils/toolHelpers';
 
 // Canvas-specific hooks
 import {
@@ -76,9 +77,9 @@ export function Canvas() {
         if (!fabricRef.current) return;
         const canvas = fabricRef.current;
 
-        const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso' || activeTool === 'smart-select';
-        const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
-        const isDrawingTool = isSelectionTool || isShapeTool;
+        const selTool = isSelectionTool(activeTool);
+        const shapeTool = isShapeTool(activeTool);
+        const drawTool = isDrawingTool(activeTool);
 
         // Clear active selection when switching tools
         canvas.discardActiveObject();
@@ -96,24 +97,24 @@ export function Canvas() {
             baseImageObjectRef.current.set({
                 selectable: isBaseSelectable,
                 evented: true,
-                hoverCursor: isDrawingTool ? 'crosshair' : 'default',
+                hoverCursor: drawTool ? 'crosshair' : 'default',
             });
         }
 
         // Toggle interactivity for all objects based on tool
-        const isLayerSelectable = !isSelectionTool;
+        const isLayerSelectable = !selTool;
         canvas.getObjects().forEach((obj) => {
             if (obj === baseImageObjectRef.current || obj === activeSelectionRef.current) return;
 
             obj.set({
                 selectable: isLayerSelectable,
-                evented: !isSelectionTool,
-                hoverCursor: isSelectionTool ? 'crosshair' : (isShapeTool ? 'move' : 'default'),
+                evented: !selTool,
+                hoverCursor: selTool ? 'crosshair' : (shapeTool ? 'move' : 'default'),
             });
         });
 
-        canvas.defaultCursor = isDrawingTool ? 'crosshair' : 'default';
-        canvas.selection = !isDrawingTool;
+        canvas.defaultCursor = drawTool ? 'crosshair' : 'default';
+        canvas.selection = !drawTool;
 
         canvas.renderAll();
     }, [activeTool, setActiveSelection]);
@@ -192,9 +193,7 @@ export function Canvas() {
                 const centerX = (canvas.width! - scaledWidth) / 2;
                 const centerY = (canvas.height! - scaledHeight) / 2;
 
-                const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
-                const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
-                const isDrawingTool = isSelectionTool || isShapeTool;
+                const drawTool2 = isDrawingTool(activeTool);
 
                 img.set({
                     left: centerX,
@@ -210,7 +209,7 @@ export function Canvas() {
                     hasBorders: true,
                     borderColor: '#FFD700',
                     borderScaleFactor: 2,
-                    hoverCursor: isDrawingTool ? 'crosshair' : 'default',
+                    hoverCursor: drawTool2 ? 'crosshair' : 'default',
                     moveCursor: 'default',
                 });
 

@@ -6,6 +6,7 @@ import { writeFile } from '@tauri-apps/plugin-fs';
 import { useCanvasStore } from '../store/canvasStore';
 import { useLayerStore } from '../store/layerStore';
 import { applyLayerFeathering, applySharpPolygonMask } from './layerCompositor';
+import { formatToMimeType, loadImage } from './imageUtils';
 
 export type ExportFormat = 'png' | 'jpeg' | 'webp';
 
@@ -38,19 +39,7 @@ export const exportImage = async (options: ExportOptions): Promise<string | null
         throw new Error('Failed to create canvas context');
     }
 
-    // Helper to convert format string to proper MIME type
-    const formatToMimeType = (format: string): string => {
-        switch (format.toLowerCase()) {
-            case 'jpg':
-            case 'jpeg':
-                return 'image/jpeg';
-            case 'webp':
-                return 'image/webp';
-            case 'png':
-            default:
-                return 'image/png';
-        }
-    };
+
 
     // Load and draw base image
     const baseMimeType = formatToMimeType(baseImage.format);
@@ -142,17 +131,7 @@ export const exportImage = async (options: ExportOptions): Promise<string | null
     return filePath;
 };
 
-/**
- * Helper to load an image from a data URL
- */
-function loadImage(src: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = src;
-    });
-}
+
 
 /**
  * Export a single layer's original image (without feathering/masking)

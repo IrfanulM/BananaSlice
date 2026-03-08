@@ -4,7 +4,8 @@
 import { useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas as FabricCanvas, Rect, Polyline, Point } from 'fabric';
-import { SELECTION_STYLE_DRAWING, SELECTION_STYLE_COMPLETE } from '../../utils/selectionStyle';
+import { SELECTION_STYLE_DRAWING, SELECTION_STYLE_COMPLETE, createRenderedSelection } from '../../utils/selectionStyle';
+import { douglasPeucker } from '../../utils/contourTracer';
 import { useToolStore } from '../../store/toolStore';
 import { useSelectionStore } from '../../store/selectionStore';
 
@@ -55,6 +56,7 @@ export function useSelectionTools({
 
             // Clear any existing selection before starting new one
             clearSelection();
+            setActiveSelection(null);
 
             isDrawing = true;
             startX = pointer.x;
@@ -98,6 +100,7 @@ export function useSelectionTools({
                     canvas.remove(activeSelectionRef.current);
                 }
 
+                // Use basic Polyline for drawing preview (recreated every frame)
                 activeSelectionRef.current = new Polyline(lassoPoints, {
                     ...SELECTION_STYLE_DRAWING,
                 });
@@ -108,14 +111,30 @@ export function useSelectionTools({
         };
 
         const handleMouseUp = () => {
-            // Add highlight fill to the completed selection
-            if (activeSelectionRef.current) {
+            if (!isDrawing) return;
+
+            // For lasso: simplify and render as bitmap (same as smart selection)
+            if (activeTool === 'lasso' && lassoPoints.length >= 3) {
+                // Remove the drawing preview
+                if (activeSelectionRef.current) {
+                    canvas.remove(activeSelectionRef.current);
+                    activeSelectionRef.current = null;
+                }
+
+                const rawPoints = lassoPoints.map(p => ({ x: p.x, y: p.y }));
+                const simplified = douglasPeucker(rawPoints, 3.0);
+
+                activeSelectionRef.current = createRenderedSelection(simplified, true);
+                canvas.add(activeSelectionRef.current);
+            } else if (activeSelectionRef.current) {
+                // Rectangle: just add the fill
                 activeSelectionRef.current.set({
                     fill: SELECTION_STYLE_COMPLETE.fill,
                 });
-                canvas.renderAll();
+            }
 
-                // Sync selection to store for API processing
+            if (activeSelectionRef.current) {
+                canvas.renderAll();
                 setActiveSelection(activeSelectionRef.current);
             }
 

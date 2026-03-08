@@ -211,29 +211,217 @@ function perpendicularDistance(point: Point2D, lineStart: Point2D, lineEnd: Poin
 }
 
 /**
+ * Remove consecutive duplicate or near-duplicate points.
+ */
+function removeDuplicates(points: Point2D[], minDist: number = 1.0): Point2D[] {
+    if (points.length < 2) return points;
+
+    const result: Point2D[] = [points[0]];
+
+    for (let i = 1; i < points.length; i++) {
+        const prev = result[result.length - 1];
+        const dx = points[i].x - prev.x;
+        const dy = points[i].y - prev.y;
+        if (dx * dx + dy * dy >= minDist * minDist) {
+            result.push(points[i]);
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Morphological erosion: shrink the mask by removing border pixels.
+ * Each pixel is only kept if ALL pixels in its kernel are foreground.
+ */
+function erodeMask(mask: Uint8Array, width: number, height: number, radius: number = 1): Uint8Array {
+    const result = new Uint8Array(width * height);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let allFilled = true;
+            for (let dy = -radius; dy <= radius && allFilled; dy++) {
+                for (let dx = -radius; dx <= radius && allFilled; dx++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height || mask[ny * width + nx] === 0) {
+                        allFilled = false;
+                    }
+                }
+            }
+            result[y * width + x] = allFilled ? 1 : 0;
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Morphological dilation: expand the mask by adding border pixels.
+ * Each pixel is set if ANY pixel in its kernel is foreground.
+ */
+function dilateMask(mask: Uint8Array, width: number, height: number, radius: number = 1): Uint8Array {
+    const result = new Uint8Array(width * height);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            let anyFilled = false;
+            for (let dy = -radius; dy <= radius && !anyFilled; dy++) {
+                for (let dx = -radius; dx <= radius && !anyFilled; dx++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx >= 0 && nx < width && ny >= 0 && ny < height && mask[ny * width + nx] > 0) {
+                        anyFilled = true;
+                    }
+                }
+            }
+            result[y * width + x] = anyFilled ? 1 : 0;
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Morphological opening: erode then dilate.
+ * Removes thin protrusions, noise, and jagged edges from the mask
+ * so the contour tracer produces clean, non-self-intersecting outlines.
+ */
+function morphologicalOpen(mask: Uint8Array, width: number, height: number, radius: number = 2): Uint8Array {
+    const eroded = erodeMask(mask, width, height, radius);
+    return dilateMask(eroded, width, height, radius);
+}
+
+/**
  * Full pipeline: binary mask → simplified polygon contour points.
+ * Cleans the mask with morphological opening, then traces and simplifies.
  *
  * @param mask - Uint8Array where non-zero = foreground object
  * @param width - Width of the mask
  * @param height - Height of the mask
- * @param simplifyTolerance - Douglas-Peucker tolerance (default 2.0 pixels)
+ * @param simplifyTolerance - Initial Douglas-Peucker tolerance (default 2.0 pixels)
+ * @param maxPoints - Maximum number of points in the output polygon (default 100)
  * @returns Array of simplified polygon points, or empty array if no contour found
  */
 export function maskToPolygon(
     mask: Uint8Array,
     width: number,
     height: number,
-    simplifyTolerance: number = 2.0
+    simplifyTolerance: number = 2.0,
+    maxPoints: number = 100
 ): Point2D[] {
-    const rawContour = marchingSquares(mask, width, height);
+    // 1. Clean the mask: remove noise and thin protrusions that cause self-intersecting contours
+    const cleanedMask = morphologicalOpen(mask, width, height, 2);
 
-    if (rawContour.length < 3) return [];
+    // 2. Trace the contour on the cleaned mask
+    const rawContour = marchingSquares(cleanedMask, width, height);
 
-    // Simplify with Douglas-Peucker
-    const simplified = douglasPeucker(rawContour, simplifyTolerance);
+    if (rawContour.length < 3) {
+        // If opening removed too much, fall back to original mask
+        const fallbackContour = marchingSquares(mask, width, height);
+        if (fallbackContour.length < 3) return [];
+        const simplified = douglasPeucker(fallbackContour, simplifyTolerance * 2);
+        return simplified.length >= 3 ? simplified : [];
+    }
 
-    // Ensure we have enough points for a valid polygon
-    if (simplified.length < 3) return rawContour.length >= 3 ? rawContour : [];
+    // 3. Remove consecutive duplicate points
+    const deduped = removeDuplicates(rawContour, 1.0);
 
-    return simplified;
+    if (deduped.length < 3) return [];
+
+    // 4. Iteratively simplify until we're under the max point count
+    let tolerance = simplifyTolerance;
+    let simplified = douglasPeucker(deduped, tolerance);
+
+    while (simplified.length > maxPoints && tolerance < 50) {
+        tolerance *= 1.5;
+        simplified = douglasPeucker(deduped, tolerance);
+    }
+
+    if (simplified.length < 3) return deduped.length >= 3 ? deduped : [];
+
+    // 5. Remove any self-intersections caused by simplification
+    return removeSelfIntersections(simplified);
+}
+
+/**
+ * Remove self-intersections from a polygon by cutting out crossing loops.
+ * When two non-adjacent edges cross, removes the shorter loop between them.
+ */
+function removeSelfIntersections(points: Point2D[]): Point2D[] {
+    let result = [...points];
+    let changed = true;
+    let iterations = 0;
+
+    // Repeat until no intersections remain (each pass may reveal new ones)
+    while (changed && iterations < 20) {
+        changed = false;
+        iterations++;
+
+        for (let i = 0; i < result.length && !changed; i++) {
+            const a1 = result[i];
+            const a2 = result[(i + 1) % result.length];
+
+            for (let j = i + 2; j < result.length && !changed; j++) {
+                // Skip edge adjacent to edge i
+                if (j === result.length - 1 && i === 0) continue;
+
+                const b1 = result[j];
+                const b2 = result[(j + 1) % result.length];
+
+                const ix = getIntersection(a1, a2, b1, b2);
+                if (ix) {
+                    // Two loops: i+1..j and j+1..i
+                    // Remove the shorter loop
+                    const loop1Len = j - i - 1; // points between edge i and edge j
+                    const loop2Len = result.length - j - 1 + i; // points wrapping around
+
+                    if (loop1Len <= loop2Len) {
+                        // Remove points between i and j, insert intersection
+                        result = [
+                            ...result.slice(0, i + 1),
+                            ix,
+                            ...result.slice(j + 1),
+                        ];
+                    } else {
+                        // Remove points wrapping around, insert intersection
+                        result = [
+                            ix,
+                            ...result.slice(i + 1, j + 1),
+                        ];
+                    }
+
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Get the intersection point of two line segments, or null if they don't cross.
+ */
+function getIntersection(a1: Point2D, a2: Point2D, b1: Point2D, b2: Point2D): Point2D | null {
+    const d1x = a2.x - a1.x;
+    const d1y = a2.y - a1.y;
+    const d2x = b2.x - b1.x;
+    const d2y = b2.y - b1.y;
+
+    const denom = d1x * d2y - d1y * d2x;
+    if (Math.abs(denom) < 1e-10) return null; // parallel
+
+    const t = ((b1.x - a1.x) * d2y - (b1.y - a1.y) * d2x) / denom;
+    const u = ((b1.x - a1.x) * d1y - (b1.y - a1.y) * d1x) / denom;
+
+    // Check if intersection is within both segments (proper intersection)
+    if (t > 0 && t < 1 && u > 0 && u < 1) {
+        return {
+            x: a1.x + t * d1x,
+            y: a1.y + t * d1y,
+        };
+    }
+
+    return null;
 }
