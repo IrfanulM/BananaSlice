@@ -5,10 +5,8 @@ import { useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas as FabricCanvas, Image as FabricImage, Polyline, Point } from 'fabric';
 import { useCanvasStore } from '../../store/canvasStore';
-import { useToolStore } from '../../store/toolStore';
 import { useLayerStore } from '../../store/layerStore';
 import { applyLayerFeathering, applySharpPolygonMask } from '../../utils/layerCompositor';
-import { isSelectionTool, isShapeTool } from '../../utils/toolHelpers';
 
 interface UseLayerRendererOptions {
     fabricRef: MutableRefObject<FabricCanvas | null>;
@@ -32,7 +30,6 @@ export function useLayerRenderer({
     baseImageReady,
 }: UseLayerRendererOptions) {
     const { imageTransform } = useCanvasStore();
-    const { activeTool } = useToolStore();
     const { layers, activeLayerId, setActiveLayer, updateLayerTransform } = useLayerStore();
 
     // Handle Edit Layers (Rendering & Interaction)
@@ -69,8 +66,6 @@ export function useLayerRenderer({
 
         // Process each non-base layer
         const processAllLayers = async () => {
-            const selTool = isSelectionTool(activeTool);
-            const shapeTool = isShapeTool(activeTool);
 
             // Check if base image has actually loaded
             if (!baseImageObjectRef.current) {
@@ -169,9 +164,8 @@ export function useLayerRenderer({
                     scaleY: targetScaleY,
                     visible: layer.visible,
                     opacity: layer.opacity / 100,
-                    selectable: !selTool,
-                    evented: !selTool,
-                    hoverCursor: selTool ? 'crosshair' : (shapeTool ? 'move' : 'default'),
+                    selectable: true,
+                    evented: true,
                     borderColor: '#FFD700',
                     cornerColor: '#FFD700',
                     cornerStyle: 'circle',
@@ -317,5 +311,5 @@ export function useLayerRenderer({
             obj.on('scaling', updatePolygonOutline);
         }
 
-    }, [layers, imageTransform, activeLayerId, baseImageReady, activeTool, setActiveLayer, updateLayerTransform, fabricRef, baseImageObjectRef, activeSelectionRef, editLayerObjectsRef, layerFeatherCacheRef, polygonOutlineRef, processingVersionRef]);
+    }, [layers, imageTransform, activeLayerId, baseImageReady, setActiveLayer, updateLayerTransform, fabricRef, baseImageObjectRef, activeSelectionRef, editLayerObjectsRef, layerFeatherCacheRef, polygonOutlineRef, processingVersionRef]);
 }

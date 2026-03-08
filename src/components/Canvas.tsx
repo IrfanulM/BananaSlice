@@ -81,8 +81,8 @@ export function Canvas() {
         const shapeTool = isShapeTool(activeTool);
         const drawTool = isDrawingTool(activeTool);
 
-        // Clear active selection when switching tools
-        canvas.discardActiveObject();
+        // Clear active object
+        (canvas as any)._activeObject = undefined;
 
         // Clear any rectangle/lasso selection overlays
         if (activeSelectionRef.current) {
@@ -193,12 +193,10 @@ export function Canvas() {
                 const centerX = (canvas.width! - scaledWidth) / 2;
                 const centerY = (canvas.height! - scaledHeight) / 2;
 
-                const drawTool2 = isDrawingTool(activeTool);
-
                 img.set({
                     left: centerX,
                     top: centerY,
-                    selectable: activeTool === 'move',
+                    selectable: false, // Updated by the tool-switch effect
                     evented: true,
                     lockMovementX: true,
                     lockMovementY: true,
@@ -209,7 +207,7 @@ export function Canvas() {
                     hasBorders: true,
                     borderColor: '#FFD700',
                     borderScaleFactor: 2,
-                    hoverCursor: drawTool2 ? 'crosshair' : 'default',
+                    hoverCursor: 'default', // Updated by the tool-switch effect
                     moveCursor: 'default',
                 });
 
@@ -232,7 +230,7 @@ export function Canvas() {
             .catch((err) => {
                 console.error('Failed to load image:', err);
             });
-    }, [baseImage, setZoom, setImageTransform, activeTool]);
+    }, [baseImage, setZoom, setImageTransform]);
 
     // Apply zoom changes from store
     useEffect(() => {

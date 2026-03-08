@@ -19,8 +19,6 @@ export async function initSegmenter(): Promise<InteractiveSegmenter> {
     if (initPromise) return initPromise;
 
     initPromise = (async () => {
-        console.log('[SmartSegmenter] Initializing MediaPipe Interactive Segmenter...');
-
         const vision = await FilesetResolver.forVisionTasks(
             'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
         );
@@ -35,7 +33,6 @@ export async function initSegmenter(): Promise<InteractiveSegmenter> {
         });
 
         segmenterInstance = segmenter;
-        console.log('[SmartSegmenter] Initialization complete.');
         return segmenter;
     })();
 
