@@ -67,6 +67,9 @@ export function useKeyboardShortcuts({
                     case 'l':
                         setActiveTool('lasso');
                         break;
+                    case 'w':
+                        setActiveTool('smart-select');
+                        break;
                     case 'u':
                         setActiveTool('shape-rect');
                         break;

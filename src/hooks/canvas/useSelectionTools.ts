@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import type { MutableRefObject } from 'react';
 import { Canvas as FabricCanvas, Rect, Polyline, Point } from 'fabric';
+import { SELECTION_STYLE_DRAWING, SELECTION_STYLE_COMPLETE } from '../../utils/selectionStyle';
 import { useToolStore } from '../../store/toolStore';
 import { useSelectionStore } from '../../store/selectionStore';
 
@@ -84,12 +85,7 @@ export function useSelectionTools({
                     top: height >= 0 ? startY : pointer.y,
                     width: Math.abs(width),
                     height: Math.abs(height),
-                    fill: '',
-                    stroke: '#000',
-                    strokeWidth: 1,
-                    strokeDashArray: [5, 5],
-                    selectable: false,
-                    evented: false,
+                    ...SELECTION_STYLE_DRAWING,
                 });
 
                 canvas.add(activeSelectionRef.current);
@@ -103,12 +99,7 @@ export function useSelectionTools({
                 }
 
                 activeSelectionRef.current = new Polyline(lassoPoints, {
-                    fill: '',
-                    stroke: '#000',
-                    strokeWidth: 1,
-                    strokeDashArray: [5, 5],
-                    selectable: false,
-                    evented: false,
+                    ...SELECTION_STYLE_DRAWING,
                 });
 
                 canvas.add(activeSelectionRef.current);
@@ -117,10 +108,10 @@ export function useSelectionTools({
         };
 
         const handleMouseUp = () => {
-            // Add yellow fill to the completed selection
+            // Add highlight fill to the completed selection
             if (activeSelectionRef.current) {
                 activeSelectionRef.current.set({
-                    fill: 'rgba(255, 215, 0, 0.1)',
+                    fill: SELECTION_STYLE_COMPLETE.fill,
                 });
                 canvas.renderAll();
 

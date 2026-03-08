@@ -1,0 +1,9 @@
+<svg fill="#000000" width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Magic wand body -->
+  <line x1="2" y1="22" x2="14" y2="10" stroke="#000000" stroke-width="2" stroke-linecap="round"/>
+  <!-- Wand tip sparkle / selection indicator -->
+  <polygon points="16,2 17.5,6.5 22,8 17.5,9.5 16,14 14.5,9.5 10,8 14.5,6.5" fill="#000000"/>
+  <!-- Small sparkles -->
+  <circle cx="20" cy="3" r="1" fill="#000000"/>
+  <circle cx="21" cy="12" r="0.8" fill="#000000"/>
+</svg>

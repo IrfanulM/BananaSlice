@@ -22,6 +22,7 @@ const shortcutSections: ShortcutSection[] = [
             { label: 'Move Tool', keys: ['V'] },
             { label: 'Rectangle Select', keys: ['M'] },
             { label: 'Lasso Select', keys: ['L'] },
+            { label: 'Smart Select', keys: ['W'] },
             { label: 'Rectangle Shape', keys: ['U'] },
             { label: 'Ellipse Shape', keys: ['O'] },
             { label: 'Deselect', keys: ['D'] },

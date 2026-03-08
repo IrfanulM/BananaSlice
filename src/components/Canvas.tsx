@@ -15,6 +15,7 @@ import {
     useSelectionTools,
     useShapeTools,
     useLayerRenderer,
+    useSmartSelection,
 } from '../hooks/canvas';
 
 export function Canvas() {
@@ -65,12 +66,17 @@ export function Canvas() {
         baseImageReady,
     });
 
+    useSmartSelection({
+        fabricRef,
+        activeSelectionRef,
+    });
+
     // Update tool mode when activeTool changes
     useEffect(() => {
         if (!fabricRef.current) return;
         const canvas = fabricRef.current;
 
-        const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso';
+        const isSelectionTool = activeTool === 'rectangle' || activeTool === 'lasso' || activeTool === 'smart-select';
         const isShapeTool = activeTool === 'shape-rect' || activeTool === 'shape-ellipse';
         const isDrawingTool = isSelectionTool || isShapeTool;
 
