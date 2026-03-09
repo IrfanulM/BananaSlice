@@ -58,6 +58,7 @@ export function useGeneration({ prompt, referenceImages, onOpenSettings }: UseGe
     };
 
     const doGenerate = async () => {
+        const startingTool = useToolStore.getState().activeTool;
         setIsGenerating(true);
         setGenerationStage(0);
         setError(null);
@@ -141,6 +142,7 @@ export function useGeneration({ prompt, referenceImages, onOpenSettings }: UseGe
                 width: processed.bounds.width,
                 height: processed.bounds.height,
                 polygonPoints: processed.relativePolygonPoints,
+                featherRadius: startingTool === 'lasso' ? 8 : 0,
             });
 
             // Clear selection and switch to move tool

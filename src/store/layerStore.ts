@@ -58,9 +58,8 @@ export const useLayerStore = create<LayerState>((set, get) => ({
         const id = generateId();
         const { layers } = get();
         const order = layers.length;
-
-        // Set default feather radius: 8px for lasso layers (with polygonPoints), 0 for others
-        const defaultFeather = layerData.polygonPoints && layerData.polygonPoints.length >= 3 ? 8 : 0;
+        // Default to 0 unless specified. Lasso will pass its own default of 8.
+        const defaultFeather = 0;
 
         const newLayer: Layer = {
             ...layerData,
