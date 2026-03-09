@@ -10,6 +10,11 @@ use commands::{
     composite_patch, composite_layers
 };
 
+#[tauri::command]
+fn show_main_window(window: tauri::Window) {
+    window.show().unwrap();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -35,7 +40,8 @@ pub fn run() {
             has_api_key,
             delete_api_key,
             composite_patch,
-            composite_layers
+            composite_layers,
+            show_main_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -12,3 +12,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </ErrorBoundary>
     </React.StrictMode>
 );
+
+// Kill splash screen instantly after React mounts
+document.getElementById('splash-screen')?.remove();
