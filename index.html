@@ -7,10 +7,37 @@
   <link href="https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400&display=swap" rel="stylesheet">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BananaSlice</title>
+  <style>
+    #splash-screen {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: #0a0a0a;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 99999;
+      color: white; font-family: 'Satoshi', sans-serif;
+    }
+    .splash-content { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+    .splash-logo { width: 80px; height: 80px; margin-bottom: 0.5rem; }
+    .splash-title { font-size: 2rem; font-weight: 900; margin: 0; letter-spacing: -0.05em; }
+    .splash-subtitle { font-size: 0.8rem; color: rgba(255, 255, 255, 0.4); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.2rem; }
+  </style>
 </head>
 
 <body>
+  <div id="splash-screen">
+    <div class="splash-content">
+      <img src="/logo.png" alt="Logo" class="splash-logo" />
+      <h1 class="splash-title">BananaSlice</h1>
+      <p class="splash-subtitle">Irfanul Majumder</p>
+    </div>
+  </div>
   <div id="root"></div>
+  <script>
+    // Reveal window immediately when HTML is parsed
+    if (window.__TAURI_INTERNALS__) {
+      window.__TAURI_INTERNALS__.invoke('show_main_window');
+    }
+  </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 
