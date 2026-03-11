@@ -4,6 +4,18 @@ All notable changes to BananaSlice will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.6] - 2026-03-11
+
+### Added
+- Selection undo/redo
+- Disable layer interaction during selection tools
+- Splash screen for bootup
+- Auto-updater
+
+### Changed
+- Improved selection border consistency
+- Turned off auto feathering for smart selection generations
+
 # [0.1.5] - 2026-03-08
 
 ### Added
