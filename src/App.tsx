@@ -15,6 +15,7 @@ import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { ReferenceImages } from './components/ReferenceImages';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { TabBar } from './components/TabBar';
+import { UpdateDialog } from './components/UpdateDialog';
 
 // Stores
 import { useCanvasStore } from './store/canvasStore';
@@ -151,6 +152,9 @@ function App() {
                     onCancel={() => setAspectRatioDialog(null)}
                 />
             )}
+
+            {/* Auto-update check */}
+            <UpdateDialog />
 
             {/* Unsaved Changes Close Confirmation Dialog */}
             <ConfirmDialog

@@ -30,6 +30,7 @@
           "path": "**"
         }
       ]
-    }
+    },
+    "updater:default"
   ]
 }

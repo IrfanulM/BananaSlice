@@ -807,3 +807,111 @@ button:focus-visible {
     margin-top: var(--spacing-sm);
     text-align: center;
 }
+
+/* Update Dialog */
+.update-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.update-dialog {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    width: 360px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.update-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.update-header h3 {
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-bold);
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.update-icon {
+    font-size: 1.2rem;
+}
+
+.update-version {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+}
+
+.update-notes {
+    max-height: 120px;
+    overflow-y: auto;
+    padding: var(--spacing-sm);
+    background: var(--bg-input);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.update-notes p {
+    margin: 0;
+}
+
+.update-error {
+    color: #f87171;
+    font-size: var(--font-size-xs);
+    margin-bottom: var(--spacing-sm);
+}
+
+.update-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+}
+
+.update-btn-skip {
+    padding: 6px 14px;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.update-btn-skip:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+
+.update-btn-install {
+    padding: 6px 14px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    background: var(--accent-primary);
+    color: var(--text-on-accent);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.update-btn-install:hover {
+    background: var(--accent-secondary);
+}
+
+.update-progress {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    padding: 6px 0;
+}
