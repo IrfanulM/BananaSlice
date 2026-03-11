@@ -3,12 +3,14 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { Layer } from '../types';
+import type { Layer, SelectionData } from '../types';
 import { useLayerStore } from './layerStore';
+import { useSelectionStore } from './selectionStore';
 
 export interface HistorySnapshot {
     layers: Layer[];
     activeLayerId: string | null;
+    selectionData: SelectionData | null;
     timestamp: number;
 }
 
@@ -27,7 +29,7 @@ interface HistoryState {
     reset: () => void;
     restoreState: (past: HistorySnapshot[], future: HistorySnapshot[], isDirty: boolean) => void;
 
-    _recordState: (layers: Layer[], activeLayerId: string | null) => void;
+    _recordState: (layers: Layer[], activeLayerId: string | null, selectionData: SelectionData | null) => void;
     _setTimeTraveling: (value: boolean) => void;
 }
 
@@ -72,20 +74,24 @@ export const useHistoryStore = create<HistoryState>()(
         isTimeTraveling: false,
         isDirty: false,
 
-        _recordState: (layers, activeLayerId) => {
+        _recordState: (layers, activeLayerId, selectionData) => {
             const { past, maxHistorySize, isTimeTraveling } = get();
 
             if (isTimeTraveling) return;
             if (layers.length === 0) return;
 
             const lastState = past[past.length - 1];
-            if (lastState && !statesAreDifferent(lastState.layers, layers)) {
+            // Check if both layers AND selection are the same
+            const layersSame = lastState && !statesAreDifferent(lastState.layers, layers);
+            const selSame = JSON.stringify(lastState?.selectionData ?? null) === JSON.stringify(selectionData);
+            if (layersSame && selSame) {
                 return;
             }
 
             const snapshot: HistorySnapshot = {
                 layers: cloneLayers(layers),
                 activeLayerId,
+                selectionData: selectionData ? JSON.parse(JSON.stringify(selectionData)) : null,
                 timestamp: Date.now(),
             };
 
@@ -121,9 +127,16 @@ export const useHistoryStore = create<HistoryState>()(
             const currentState = newPast.pop()!;
             const previousState = newPast[newPast.length - 1];
 
+            // Preserve current layer panel selection
+            const currentActiveLayer = useLayerStore.getState().activeLayerId;
             useLayerStore.getState().restoreLayers(
                 cloneLayers(previousState.layers),
-                previousState.activeLayerId
+                currentActiveLayer
+            );
+
+            // Restore selection state
+            useSelectionStore.getState().restoreSelectionData(
+                previousState.selectionData ?? null
             );
 
             set({
@@ -143,9 +156,16 @@ export const useHistoryStore = create<HistoryState>()(
 
             const [nextState, ...newFuture] = future;
 
+            // Preserve current layer panel selection
+            const currentActiveLayer = useLayerStore.getState().activeLayerId;
             useLayerStore.getState().restoreLayers(
                 cloneLayers(nextState.layers),
-                nextState.activeLayerId
+                currentActiveLayer
+            );
+
+            // Restore selection state
+            useSelectionStore.getState().restoreSelectionData(
+                nextState.selectionData ?? null
             );
 
             set({
@@ -181,21 +201,62 @@ export const useHistoryStore = create<HistoryState>()(
 
 let prevLayers: Layer[] = [];
 let prevActiveLayerId: string | null = null;
+let prevSelectionData: SelectionData | null = null;
+
+/** Extract serializable selection data from the active selection Fabric object */
+function captureSelectionData(): SelectionData | null {
+    const sel = useSelectionStore.getState().activeSelection;
+    if (!sel) return null;
+
+    // Polygon-based selection (lasso / smart-select)
+    if (sel._isSelectionImage && sel.data?.polygonPoints) {
+        return {
+            type: 'polygon',
+            points: sel.data.polygonPoints.map((pt: any) => ({ x: pt.x, y: pt.y })),
+        };
+    }
+
+    // Rectangle selection
+    if (sel.type === 'rect') {
+        return {
+            type: 'rect',
+            left: sel.left,
+            top: sel.top,
+            width: sel.width * (sel.scaleX || 1),
+            height: sel.height * (sel.scaleY || 1),
+        };
+    }
+
+    return null;
+}
+
+const triggerRecord = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        const layerState = useLayerStore.getState();
+        const selData = captureSelectionData();
+        useHistoryStore.getState()._recordState(
+            layerState.layers,
+            layerState.activeLayerId,
+            selData
+        );
+    }, DEBOUNCE_MS);
+};
 
 useLayerStore.subscribe((state) => {
     if (state.layers === prevLayers && state.activeLayerId === prevActiveLayerId) {
         return;
     }
-
     prevLayers = state.layers;
     prevActiveLayerId = state.activeLayerId;
+    triggerRecord();
+});
 
-    if (debounceTimer) clearTimeout(debounceTimer);
-
-    debounceTimer = setTimeout(() => {
-        useHistoryStore.getState()._recordState(
-            state.layers,
-            state.activeLayerId
-        );
-    }, DEBOUNCE_MS);
+useSelectionStore.subscribe((_state) => {
+    const selData = captureSelectionData();
+    const selStr = JSON.stringify(selData);
+    const prevStr = JSON.stringify(prevSelectionData);
+    if (selStr === prevStr) return;
+    prevSelectionData = selData;
+    triggerRecord();
 });

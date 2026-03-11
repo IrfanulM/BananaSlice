@@ -6,6 +6,8 @@ import type { MutableRefObject } from 'react';
 import { Canvas as FabricCanvas, Image as FabricImage, Polyline, Point } from 'fabric';
 import { useCanvasStore } from '../../store/canvasStore';
 import { useLayerStore } from '../../store/layerStore';
+import { useToolStore } from '../../store/toolStore';
+import { isSelectionTool } from '../../utils/toolHelpers';
 import { applyLayerFeathering, applySharpPolygonMask } from '../../utils/layerCompositor';
 
 interface UseLayerRendererOptions {
@@ -31,6 +33,8 @@ export function useLayerRenderer({
 }: UseLayerRendererOptions) {
     const { imageTransform } = useCanvasStore();
     const { layers, activeLayerId, setActiveLayer, updateLayerTransform } = useLayerStore();
+    const activeTool = useToolStore(s => s.activeTool);
+    const isSelTool = isSelectionTool(activeTool);
 
     // Handle Edit Layers (Rendering & Interaction)
     useEffect(() => {
@@ -57,8 +61,8 @@ export function useLayerRenderer({
             baseImageObjectRef.current.set('borderColor', '#FFD700');
         }
 
-        // Handle active selection setup for base layer
-        if (activeLayerId === baseLayerId && baseImageObjectRef.current) {
+        // Handle active selection setup for base layer (only when not using selection tools)
+        if (!isSelTool && activeLayerId === baseLayerId && baseImageObjectRef.current) {
             if (canvas.getActiveObject() !== baseImageObjectRef.current) {
                 canvas.setActiveObject(baseImageObjectRef.current);
             }
@@ -164,8 +168,8 @@ export function useLayerRenderer({
                     scaleY: targetScaleY,
                     visible: layer.visible,
                     opacity: layer.opacity / 100,
-                    selectable: true,
-                    evented: true,
+                    selectable: !isSelTool,
+                    evented: !isSelTool,
                     borderColor: '#FFD700',
                     cornerColor: '#FFD700',
                     cornerStyle: 'circle',
@@ -176,7 +180,7 @@ export function useLayerRenderer({
                 (obj as any).data = { layerId: layer.id };
                 obj.setCoords();
 
-                if (layer.id === activeLayerId && canvas.getActiveObject() !== obj) {
+                if (!isSelTool && layer.id === activeLayerId && canvas.getActiveObject() !== obj) {
                     canvas.setActiveObject(obj);
                 }
             }
@@ -311,5 +315,5 @@ export function useLayerRenderer({
             obj.on('scaling', updatePolygonOutline);
         }
 
-    }, [layers, imageTransform, activeLayerId, baseImageReady, setActiveLayer, updateLayerTransform, fabricRef, baseImageObjectRef, activeSelectionRef, editLayerObjectsRef, layerFeatherCacheRef, polygonOutlineRef, processingVersionRef]);
+    }, [layers, imageTransform, activeLayerId, baseImageReady, isSelTool, setActiveLayer, updateLayerTransform, fabricRef, baseImageObjectRef, activeSelectionRef, editLayerObjectsRef, layerFeatherCacheRef, polygonOutlineRef, processingVersionRef]);
 }

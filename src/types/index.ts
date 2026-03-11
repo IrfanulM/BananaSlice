@@ -3,6 +3,18 @@
 // Tool types
 export type Tool = 'move' | 'lasso' | 'rectangle' | 'smart-select' | 'shape-rect' | 'shape-ellipse';
 
+// Serializable representation of a canvas selection for history tracking
+export interface SelectionData {
+    type: 'polygon' | 'rect';
+    // Polygon points (canvas-space) for lasso/smart-select
+    points?: { x: number; y: number }[];
+    // Rect bounds (canvas-space) for rectangle selections
+    left?: number;
+    top?: number;
+    width?: number;
+    height?: number;
+}
+
 // AI Model types
 export type AIModel = 'nano-banana-pro' | 'nano-banana';
 

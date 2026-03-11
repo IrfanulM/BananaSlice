@@ -2,13 +2,15 @@
 // Refactored to use custom hooks for better separation of concerns
 
 import { useEffect, useRef, useState } from 'react';
-import { Image as FabricImage, Polyline } from 'fabric';
+import { Image as FabricImage, Polyline, Rect } from 'fabric';
 import { useCanvasStore } from '../store/canvasStore';
 import { useToolStore } from '../store/toolStore';
 import { useSelectionStore } from '../store/selectionStore';
 import { useLayerStore } from '../store/layerStore';
 import { ContextToolbar } from './ContextToolbar';
 import { isSelectionTool, isShapeTool, isDrawingTool } from '../utils/toolHelpers';
+import { createRenderedSelection } from '../utils/selectionStyle';
+import { SELECTION_STYLE_COMPLETE } from '../utils/selectionStyle';
 
 // Canvas-specific hooks
 import {
@@ -42,7 +44,7 @@ export function Canvas() {
     // Store hooks
     const { baseImage, zoom, setZoom, setImageTransform } = useCanvasStore();
     const { activeTool } = useToolStore();
-    const { setActiveSelection } = useSelectionStore();
+    const { setActiveSelection, pendingRestore, clearPendingRestore } = useSelectionStore();
     const { layers, activeLayerId, setActiveLayer } = useLayerStore();
 
     // Use the custom hooks for different functionality
@@ -71,6 +73,43 @@ export function Canvas() {
         fabricRef,
         activeSelectionRef,
     });
+
+    // Handle selection restoration from undo/redo
+    useEffect(() => {
+        if (!pendingRestore || !fabricRef.current) return;
+
+        const canvas = fabricRef.current;
+
+        // Clear existing selection first
+        if (activeSelectionRef.current) {
+            canvas.remove(activeSelectionRef.current);
+            activeSelectionRef.current = null;
+        }
+
+        if (pendingRestore.type === 'polygon' && pendingRestore.points && pendingRestore.points.length >= 3) {
+            const selImg = createRenderedSelection(pendingRestore.points, true);
+            activeSelectionRef.current = selImg;
+            canvas.add(selImg);
+            canvas.renderAll();
+            setActiveSelection(selImg);
+        } else if (pendingRestore.type === 'rect' && pendingRestore.left != null) {
+            const rect = new Rect({
+                left: pendingRestore.left,
+                top: pendingRestore.top,
+                width: pendingRestore.width,
+                height: pendingRestore.height,
+                ...SELECTION_STYLE_COMPLETE,
+                selectable: false,
+                evented: false,
+            });
+            activeSelectionRef.current = rect;
+            canvas.add(rect);
+            canvas.renderAll();
+            setActiveSelection(rect);
+        }
+
+        clearPendingRestore();
+    }, [pendingRestore]);
 
     // Update tool mode when activeTool changes
     useEffect(() => {
