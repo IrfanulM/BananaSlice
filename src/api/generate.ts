@@ -8,6 +8,7 @@ export interface GenerateRequest {
     image_base64: string;
     mask_base64: string;
     reference_images?: string[]; // Optional reference images as base64
+    base_url?: string; // Optional custom API base URL
 }
 
 export interface GenerateResponse {
@@ -45,14 +46,17 @@ export async function generateFill(
     prompt: string,
     imageBase64: string,
     maskBase64: string,
-    referenceImages: string[] = []
+    referenceImages: string[] = [],
+    baseUrl: string = '',
+    customModel: string = ''
 ): Promise<GenerateResponse> {
     const request: GenerateRequest = {
-        model,
+        model: customModel || model,
         prompt,
         image_base64: imageBase64,
         mask_base64: maskBase64,
         reference_images: referenceImages,
+        base_url: baseUrl || undefined,
     };
 
     return invoke<GenerateResponse>('generate_fill', { request });

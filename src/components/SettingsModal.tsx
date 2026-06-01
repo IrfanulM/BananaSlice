@@ -1,6 +1,7 @@
 // Settings Modal Component
 import { useState, useEffect } from 'react';
 import { setApiKey, hasApiKey, deleteApiKey } from '../api';
+import { useSettingsStore } from '../store/settingsStore';
 import { Tooltip } from './Tooltip';
 import { open } from '@tauri-apps/plugin-shell';
 import './Modal.css';
@@ -15,6 +16,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const [hasKey, setHasKey] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    const baseUrl = useSettingsStore((s) => s.baseUrl);
+    const customModel = useSettingsStore((s) => s.customModel);
+    const setBaseUrl = useSettingsStore((s) => s.setBaseUrl);
+    const setCustomModel = useSettingsStore((s) => s.setCustomModel);
 
     useEffect(() => {
         if (isOpen) {
@@ -147,6 +153,40 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 {message.text}
                             </div>
                         )}
+                    </div>
+
+                    <div className="settings-section" style={{ marginTop: '24px' }}>
+                        <h3>Custom API Endpoint</h3>
+                        <p className="settings-description">
+                            Configure a custom Gemini-compatible API endpoint. Leave empty to use the default Google API.
+                        </p>
+
+                        <label className="input-label" style={{ display: 'block', marginBottom: '6px', fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
+                            Base URL
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="https://generativelanguage.googleapis.com/v1beta"
+                            value={baseUrl}
+                            onChange={(e) => setBaseUrl(e.target.value)}
+                            className="api-key-input"
+                            style={{ width: '100%', boxSizing: 'border-box', marginBottom: '12px' }}
+                        />
+
+                        <label className="input-label" style={{ display: 'block', marginBottom: '6px', fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
+                            Custom Model ID
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="e.g. gemini-2.5-flash-image (leave empty for default)"
+                            value={customModel}
+                            onChange={(e) => setCustomModel(e.target.value)}
+                            className="api-key-input"
+                            style={{ width: '100%', boxSizing: 'border-box' }}
+                        />
+                        <p className="settings-description" style={{ marginTop: '6px' }}>
+                            When set, this overrides the model selector in the main panel.
+                        </p>
                     </div>
                 </div>
             </div>

@@ -62,7 +62,7 @@ function App() {
     const { activeSelection } = useSelectionStore();
     const { setBaseLayer } = useLayerStore();
     const { undo: handleUndo, redo: handleRedo, canUndo, canRedo, reset: resetHistory } = useHistoryStore();
-    const { setDefaultModel: setModel } = useSettingsStore();
+    const { setDefaultModel: setModel, customModel } = useSettingsStore();
     const { recentFiles } = useRecentFilesStore();
 
     // Custom hooks
@@ -358,10 +358,17 @@ function App() {
 
                             <div className="model-selector">
                                 <label className="input-label">Model</label>
-                                <select className="select-input" value={model} onChange={(e) => setModel(e.target.value as AIModel)}>
-                                    <option value="nano-banana-pro">Nano Banana Pro</option>
-                                    <option value="nano-banana">Nano Banana (Fast)</option>
-                                </select>
+                                {customModel ? (
+                                    <div className="api-key-status" style={{ padding: 'var(--spacing-sm) var(--spacing-md)', background: 'var(--bg-input)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-medium)', fontSize: 'var(--font-size-sm)' }}>
+                                        <span className="status-configured">✓ {customModel}</span>
+                                        <span style={{ color: 'var(--text-secondary)', marginLeft: '8px' }}>(custom)</span>
+                                    </div>
+                                ) : (
+                                    <select className="select-input" value={model} onChange={(e) => setModel(e.target.value as AIModel)}>
+                                        <option value="nano-banana-pro">Nano Banana Pro</option>
+                                        <option value="nano-banana">Nano Banana (Fast)</option>
+                                    </select>
+                                )}
                             </div>
 
                             <ReferenceImages

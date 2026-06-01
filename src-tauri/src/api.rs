@@ -24,6 +24,7 @@ pub enum ApiError {
     NoImageGenerated,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Model {
     #[serde(rename = "nano-banana")]
@@ -179,6 +180,7 @@ struct GeminiError {
 pub struct NanoBananaClient {
     client: Client,
     api_key: String,
+    base_url: String,
 }
 
 impl NanoBananaClient {
@@ -186,6 +188,15 @@ impl NanoBananaClient {
         Self {
             client: Client::new(),
             api_key,
+            base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+        }
+    }
+
+    pub fn with_base_url(api_key: String, base_url: String) -> Self {
+        Self {
+            client: Client::new(),
+            api_key,
+            base_url,
         }
     }
 
@@ -197,18 +208,18 @@ impl NanoBananaClient {
     /// * `image_base64` - The cropped source image as base64
     /// * `mask_base64` - The mask image as base64 (white = generate, black = keep)
     /// * `reference_images` - Optional reference images to guide generation
+    /// * `custom_base_url` - Optional custom base URL override
     pub async fn generate_fill(
         &self,
-        model: Model,
+        model: &str,
         prompt: &str,
         image_base64: &str,
         mask_base64: &str,
         reference_images: &[&str],
     ) -> Result<String, ApiError> {
-        let model_name = model.to_gemini_model();
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-            model_name, self.api_key
+            "{}/models/{}:generateContent?key={}",
+            self.base_url, model, self.api_key
         );
 
         // Build parts array starting with source image and mask
@@ -284,7 +295,7 @@ impl NanoBananaClient {
         };
 
         // Send request
-        log::info!("Sending request to Gemini API: {}", model_name);
+        log::info!("Sending request to Gemini API: {}", model);
         
         let response = self
             .client
