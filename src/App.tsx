@@ -360,6 +360,7 @@ function App() {
                                 <label className="input-label">Model</label>
                                 <select className="select-input" value={model} onChange={(e) => setModel(e.target.value as AIModel)}>
                                     <option value="nano-banana-pro">Nano Banana Pro</option>
+                                    <option value="nano-banana-2">Nano Banana 2</option>
                                     <option value="nano-banana">Nano Banana (Fast)</option>
                                 </select>
                             </div>
