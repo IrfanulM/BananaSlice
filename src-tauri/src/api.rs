@@ -30,6 +30,8 @@ pub enum Model {
     NanoBanana,
     #[serde(rename = "nano-banana-pro")]
     NanoBananaPro,
+    #[serde(rename = "nano-banana-2")]
+    NanoBanana2,
 }
 
 impl Model {
@@ -39,6 +41,8 @@ impl Model {
             Model::NanoBanana => "gemini-2.5-flash-image",
             // Pro model
             Model::NanoBananaPro => "gemini-3-pro-image-preview",
+            // Nano Banana 2
+            Model::NanoBanana2 => "gemini-3.1-flash-image",
         }
     }
 }
@@ -112,6 +116,8 @@ fn calculate_aspect_ratio(width: u32, height: u32) -> String {
     
     // Supported aspect ratios from API docs
     let ratios = [
+        (8.0 / 1.0, "8:1"),
+        (4.0 / 1.0, "4:1"),
         (21.0 / 9.0, "21:9"),
         (16.0 / 9.0, "16:9"),
         (5.0 / 4.0, "5:4"),
@@ -122,6 +128,8 @@ fn calculate_aspect_ratio(width: u32, height: u32) -> String {
         (3.0 / 4.0, "3:4"),
         (2.0 / 3.0, "2:3"),
         (9.0 / 16.0, "9:16"),
+        (1.0 / 4.0, "1:4"),
+        (1.0 / 8.0, "1:8"),
     ];
     
     // Find the closest ratio

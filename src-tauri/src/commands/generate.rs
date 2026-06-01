@@ -69,6 +69,7 @@ pub async fn generate_fill(request: GenerateRequest) -> GenerateResponse {
     // Parse model
     let model = match request.model.as_str() {
         "nano-banana-pro" => Model::NanoBananaPro,
+        "nano-banana-2" => Model::NanoBanana2,
         "nano-banana" | _ => Model::NanoBanana,
     };
 
