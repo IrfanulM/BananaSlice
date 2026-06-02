@@ -73,12 +73,25 @@ export const quickSave = async (): Promise<boolean> => {
 export const saveProjectAs = async (): Promise<string | null> => {
     const projectData = buildProjectData();
 
+    // Get default filename from original image or project path
+    const canvasState = useCanvasStore.getState();
+    const currentPath = canvasState.imagePath;
+    let baseName = 'project';
+    if (currentPath) {
+        const pathParts = currentPath.replace(/\\/g, '/').split('/');
+        const fileName = pathParts[pathParts.length - 1];
+        const lastDot = fileName.lastIndexOf('.');
+        baseName = lastDot !== -1 ? fileName.substring(0, lastDot) : fileName;
+        // Strip _edit suffix if saving as a project
+        baseName = baseName.replace(/_edit$/, '');
+    }
+
     const filePath = await save({
         filters: [{
             name: 'BananaSlice Project',
             extensions: ['banslice']
         }],
-        defaultPath: 'project.banslice'
+        defaultPath: `${baseName}.banslice`
     });
 
     if (filePath) {

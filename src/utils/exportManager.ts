@@ -96,14 +96,21 @@ export const exportImage = async (options: ExportOptions): Promise<string | null
         extensions: [options.format]
     }];
 
-    // Get default filename from project name or 'untitled'
+    // Get default filename from project name or original filename + modifier
     let baseName = 'untitled';
     const { imagePath } = canvasState;
-    if (imagePath && imagePath.endsWith('.banslice')) {
+    if (imagePath) {
         // Extract filename without path and extension
         const pathParts = imagePath.replace(/\\/g, '/').split('/');
         const fileName = pathParts[pathParts.length - 1];
-        baseName = fileName.replace('.banslice', '');
+        const lastDotIndex = fileName.lastIndexOf('.');
+        const nameWithoutExt = lastDotIndex !== -1 ? fileName.substring(0, lastDotIndex) : fileName;
+        
+        if (imagePath.endsWith('.banslice')) {
+            baseName = nameWithoutExt;
+        } else {
+            baseName = `${nameWithoutExt}_edit`;
+        }
     }
     const defaultPath = `${baseName}.${options.format}`;
 
