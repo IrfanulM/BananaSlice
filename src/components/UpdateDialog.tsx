@@ -20,7 +20,7 @@ export function UpdateDialog() {
         const checkForUpdate = async () => {
             try {
                 const result = await check();
-                if (result?.available) {
+                if (result) {
                     setUpdate(result);
                     setUpdateInfo({
                         version: result.version,
