@@ -71,6 +71,7 @@ pub async fn generate_fill(request: GenerateRequest) -> GenerateResponse {
     // Resolve model name: known aliases map to Gemini models, otherwise use as-is
     let model_name = match request.model.as_str() {
         "nano-banana-pro" => "gemini-3-pro-image-preview",
+        "nano-banana-2" => "gemini-3.1-flash-image",
         "nano-banana" => "gemini-2.5-flash-image",
         custom => custom, // Allow custom model IDs
     };

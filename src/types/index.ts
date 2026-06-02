@@ -16,7 +16,7 @@ export interface SelectionData {
 }
 
 // AI Model types
-export type AIModel = 'nano-banana-pro' | 'nano-banana';
+export type AIModel = 'nano-banana-pro' | 'nano-banana-2' | 'nano-banana';
 
 // Image data from backend
 export interface ImageData {

@@ -24,26 +24,6 @@ pub enum ApiError {
     NoImageGenerated,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Model {
-    #[serde(rename = "nano-banana")]
-    NanoBanana,
-    #[serde(rename = "nano-banana-pro")]
-    NanoBananaPro,
-}
-
-impl Model {
-    pub fn to_gemini_model(&self) -> &'static str {
-        match self {
-            // Fast model for image generation 
-            Model::NanoBanana => "gemini-2.5-flash-image",
-            // Pro model
-            Model::NanoBananaPro => "gemini-3-pro-image-preview",
-        }
-    }
-}
-
 #[derive(Debug, Serialize)]
 struct GeminiRequest {
     contents: Vec<Content>,
@@ -113,6 +93,8 @@ fn calculate_aspect_ratio(width: u32, height: u32) -> String {
     
     // Supported aspect ratios from API docs
     let ratios = [
+        (8.0 / 1.0, "8:1"),
+        (4.0 / 1.0, "4:1"),
         (21.0 / 9.0, "21:9"),
         (16.0 / 9.0, "16:9"),
         (5.0 / 4.0, "5:4"),
@@ -123,6 +105,8 @@ fn calculate_aspect_ratio(width: u32, height: u32) -> String {
         (3.0 / 4.0, "3:4"),
         (2.0 / 3.0, "2:3"),
         (9.0 / 16.0, "9:16"),
+        (1.0 / 4.0, "1:4"),
+        (1.0 / 8.0, "1:8"),
     ];
     
     // Find the closest ratio

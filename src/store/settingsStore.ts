@@ -28,7 +28,7 @@ export const useSettingsStore = create<SettingsState>()(
         (set) => ({
             // Initial state
             apiKeySet: false,
-            defaultModel: 'nano-banana-pro',
+            defaultModel: 'nano-banana-2',
             baseUrl: '',
             customModel: '',
 
