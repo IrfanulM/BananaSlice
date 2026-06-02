@@ -1,7 +1,7 @@
 // BananaSlice - Generation Commands
 // Tauri commands for AI image generation
 
-use crate::api::{Model, NanoBananaClient};
+use crate::api::NanoBananaClient;
 use crate::keystore;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,8 @@ pub struct GenerateRequest {
     pub mask_base64: String,
     #[serde(default)]
     pub reference_images: Vec<String>, // Optional reference images as base64
+    #[serde(default)]
+    pub base_url: Option<String>, // Optional custom base URL
 }
 
 #[derive(Debug, Serialize)]
@@ -66,21 +68,25 @@ pub async fn generate_fill(request: GenerateRequest) -> GenerateResponse {
         }
     };
 
-    // Parse model
-    let model = match request.model.as_str() {
-        "nano-banana-pro" => Model::NanoBananaPro,
-        "nano-banana-2" => Model::NanoBanana2,
-        "nano-banana" | _ => Model::NanoBanana,
+    // Resolve model name: known aliases map to Gemini models, otherwise use as-is
+    let model_name = match request.model.as_str() {
+        "nano-banana-pro" => "gemini-3-pro-image-preview",
+        "nano-banana-2" => "gemini-3.1-flash-image",
+        "nano-banana" => "gemini-2.5-flash-image",
+        custom => custom, // Allow custom model IDs
     };
 
-    // Create client and make request
-    let client = NanoBananaClient::new(api_key);
+    // Create client with optional custom base URL
+    let client = match &request.base_url {
+        Some(base_url) if !base_url.is_empty() => NanoBananaClient::with_base_url(api_key, base_url.clone()),
+        _ => NanoBananaClient::new(api_key),
+    };
     
     // Convert reference images to &str slices
     let ref_images: Vec<&str> = request.reference_images.iter().map(|s| s.as_str()).collect();
     
     match client
-        .generate_fill(model, &request.prompt, &request.image_base64, &request.mask_base64, &ref_images)
+        .generate_fill(model_name, &request.prompt, &request.image_base64, &request.mask_base64, &ref_images)
         .await
     {
         Ok(image_base64) => {

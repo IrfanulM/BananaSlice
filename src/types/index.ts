@@ -74,6 +74,7 @@ export interface GenerationRequest {
     prompt: string;
     imageBase64: string;
     maskBase64: string;
+    baseUrl?: string;
 }
 
 // Canvas state

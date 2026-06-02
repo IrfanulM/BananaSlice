@@ -46,7 +46,7 @@ export function useGeneration({ prompt, referenceImages, onOpenSettings }: UseGe
     const { activeSelection, processForAPI, clearSelection, setActiveSelection } = useSelectionStore();
     const { addLayer, getVisibleLayers } = useLayerStore();
     const { setActiveTool } = useToolStore();
-    const { defaultModel: model } = useSettingsStore();
+    const { defaultModel: model, baseUrl, customModel } = useSettingsStore();
 
     // Create progress stages based on current stage
     const getProgressStages = (): ProgressStage[] => {
@@ -109,7 +109,9 @@ export function useGeneration({ prompt, referenceImages, onOpenSettings }: UseGe
                 prompt,
                 processed.croppedImageBase64,
                 processed.maskBase64,
-                referenceImages.filter(img => img !== '')
+                referenceImages.filter(img => img !== ''),
+                baseUrl,
+                customModel
             );
 
             if (!genResult.success || !genResult.image_base64) {

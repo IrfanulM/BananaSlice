@@ -12,9 +12,15 @@ interface SettingsState {
     // Default model
     defaultModel: AIModel;
 
+    // Custom API configuration
+    baseUrl: string;
+    customModel: string;
+
     // Actions
     setApiKeySet: (set: boolean) => void;
     setDefaultModel: (model: AIModel) => void;
+    setBaseUrl: (url: string) => void;
+    setCustomModel: (model: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -23,16 +29,22 @@ export const useSettingsStore = create<SettingsState>()(
             // Initial state
             apiKeySet: false,
             defaultModel: 'nano-banana-2',
+            baseUrl: '',
+            customModel: '',
 
             // Actions
             setApiKeySet: (apiKeySet) => set({ apiKeySet }),
             setDefaultModel: (defaultModel) => set({ defaultModel }),
+            setBaseUrl: (baseUrl) => set({ baseUrl }),
+            setCustomModel: (customModel) => set({ customModel }),
         }),
         {
             name: 'bananaslice-settings',
             partialize: (state) => ({
                 defaultModel: state.defaultModel,
                 apiKeySet: state.apiKeySet,
+                baseUrl: state.baseUrl,
+                customModel: state.customModel,
             }),
         }
     )
