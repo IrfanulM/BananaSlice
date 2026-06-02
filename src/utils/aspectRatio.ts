@@ -3,6 +3,8 @@
 
 // Supported aspect ratios by Gemini API
 const SUPPORTED_RATIOS = [
+    { name: '8:1', value: 8 / 1 },
+    { name: '4:1', value: 4 / 1 },
     { name: '21:9', value: 21 / 9 },
     { name: '16:9', value: 16 / 9 },
     { name: '5:4', value: 5 / 4 },
@@ -13,6 +15,8 @@ const SUPPORTED_RATIOS = [
     { name: '3:4', value: 3 / 4 },
     { name: '2:3', value: 2 / 3 },
     { name: '9:16', value: 9 / 16 },
+    { name: '1:4', value: 1 / 4 },
+    { name: '1:8', value: 1 / 8 },
 ];
 
 export interface AspectRatioAdjustment {
@@ -91,8 +95,8 @@ export function calculateAspectRatioAdjustment(
 function formatRatio(ratio: number): string {
     // Try to format as a simple ratio
     const testRatios = [
-        [21, 9], [16, 9], [5, 4], [4, 3], [3, 2], [1, 1],
-        [4, 5], [3, 4], [2, 3], [9, 16]
+        [8, 1], [4, 1], [21, 9], [16, 9], [5, 4], [4, 3], [3, 2], [1, 1],
+        [4, 5], [3, 4], [2, 3], [9, 16], [1, 4], [1, 8]
     ];
 
     for (const [w, h] of testRatios) {
